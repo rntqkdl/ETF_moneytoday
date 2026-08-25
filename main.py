@@ -47,6 +47,9 @@ def main():
     # paper-status
     subparsers.add_parser("paper-status", help="가상 10억 원 포트폴리오 실시간 성과 대시보드 출력")
 
+    # dashboard
+    subparsers.add_parser("dashboard", help="실시간 반응형 웹 대시보드 서버 가동 (http://localhost:8000/dashboard)")
+
     # weekly-review
     subparsers.add_parser("weekly-review", help="주간 성과 귀속 분석 및 딥리포트 생성")
 
@@ -90,7 +93,6 @@ def main():
         state = account.get_status()
         holdings = state.get("holdings", {})
         
-        # 비중 추출
         weights = {}
         for k, v in holdings.items():
             weights[k] = v.get("target_weight", 0.20)
@@ -208,6 +210,13 @@ def main():
         from src.quant.telemetry import PortfolioTelemetry
         account = PaperTradingAccount()
         print(PortfolioTelemetry.render_dashboard(account))
+    elif args.command == "dashboard":
+        from src.api.server import start_server
+        print("=" * 70)
+        print("🚀 [Web Dashboard] 실시간 웹 대시보드 서버 가동 중...")
+        print("👉 로컬 접속 URL: http://localhost:8000/dashboard")
+        print("=" * 70)
+        start_server()
     elif args.command == "weekly-review":
         from src.quant.weekly_review import WeeklyPerformanceReviewer
         reviewer = WeeklyPerformanceReviewer()
