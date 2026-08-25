@@ -33,6 +33,10 @@ def main():
     paper_parser = subparsers.add_parser("paper-rebalance", help="10억 원 가상 포트폴리오 AI 리밸런싱 실행")
     paper_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
 
+    # twap-plan
+    twap_parser = subparsers.add_parser("twap-plan", help="10억 원 슬리피지 방어 TWAP 6회 분할 주문표 생성")
+    twap_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
+
     # paper-status
     subparsers.add_parser("paper-status", help="가상 10억 원 포트폴리오 실시간 성과 대시보드 출력")
 
@@ -93,6 +97,39 @@ def main():
             print(f"  • {k}: {v*100:.1f}%")
         print(f"💡 [판단 근거]: {decision.reasoning}")
         print("=" * 70)
+    elif args.command == "twap-plan":
+        from src.ai.inference_engine import QuantInferenceEngine
+        from src.quant.harness import ComplianceHarness
+        from src.quant.optimizer import PortfolioOptimizer
+        from src.quant.paper_trader import PaperTradingAccount
+        from src.quant.execution_twap import TWAPExecutionEngine
+        from src.database.db_manager import DatabaseManager
+
+        db = DatabaseManager()
+        engine = QuantInferenceEngine()
+        harness = ComplianceHarness(db=db)
+        optimizer = PortfolioOptimizer(harness=harness)
+        account = PaperTradingAccount(db=db)
+
+        decision = engine.evaluate_news(args.news)
+        weights = optimizer.calculate_weights(decision)
+        state = account.get_status()
+        
+        plan = TWAPExecutionEngine.generate_twap_plan(
+            target_weights=weights,
+            current_holdings=state.get("holdings", {}),
+            prices={},
+            total_nav=state.get("total_nav_krw", 1_000_000_000.0)
+        )
+
+        print("\n" + "=" * 75)
+        print(f"⏱️ [TWAP 슬리피지 방어 분할 주문표] (총 주문액: {plan.total_order_amount_krw:,.0f} 원)")
+        print(f"• 분할 횟수: {plan.num_slices}회 ({plan.slice_interval_minutes}분 간격) | 실행 시간: {plan.start_time} ~ {plan.end_time}")
+        print(f"• 예상 슬리피지 절감 효과: +{plan.expected_slippage_savings_krw:,.0f} 원 (호가 충격 방어)")
+        print("-" * 75)
+        for s in plan.slices[:12]:
+            print(f"  [{s.scheduled_time}] #{s.slice_index}차 {s.action} | {s.ticker_name:30s} | {s.shares:6,d}주 | 지정가: {s.limit_price:,.0f}원 ({s.slice_amount_krw:,.0f}원)")
+        print("=" * 75)
     elif args.command == "paper-rebalance":
         from src.ai.inference_engine import QuantInferenceEngine
         from src.quant.harness import ComplianceHarness
