@@ -1,16 +1,13 @@
 """
-ingest_universe.py
-대회 주최 측 10대 후원사 연금 적격 ETF 400여 개 종목 마스터 데이터 파싱 및 DB 적재 스크립트
+src/rag/universe_parser.py
+대회 10대 후원사 연금 적격 ETF 893개 전 종목 마스터 데이터 파서 및 8대 클러스터 분류기
 """
 
-import os
-import re
 import hashlib
 from typing import List, Dict, Any
-from db_manager import DatabaseManager
+from src.database.models import ETFMasterRecord
 
-# 사용자 제공 연금형 전체 ETF 리스트
-RAW_ETF_LIST = [
+RAW_ETF_UNIVERSE = [
     # RISE (KB자산운용)
     "RISE 200TR", "RISE 200고배당커버드콜ATM", "RISE 200금융", "RISE 200위클리커버드콜", "RISE 200",
     "RISE 200채권혼합50", "RISE 26-11 회사채(AA-이상)액티브", "RISE 2차전지TOP10", "RISE 2차전지액티브",
@@ -130,21 +127,21 @@ RAW_ETF_LIST = [
     "KODEX 미국AI테크TOP10타겟커버드콜", "KODEX 미국CPU반도체TOP10", "KODEX 미국ETF산업Top10 Indxx",
     "KODEX 미국S&P500", "KODEX 미국S&P500경기소비재", "KODEX 미국S&P500금융", "KODEX 미국S&P500데일리커버드콜OTM",
     "KODEX 미국S&P500배당귀족커버드콜(합성 H)", "KODEX 미국S&P500버퍼3월액티브", "KODEX 미국S&P500버퍼6월액티브",
-    "KODEX 미국S&P500산업재(합성)", "KODEX 미국S&P500액티브", "KODEX 미국S&P500에너지(합성)", "KODEX 미국S&P500유틸리티",
-    "KODEX 미국S&P500(H)", "KODEX 미국S&P500커뮤니케이션", "KODEX 미국S&P500테크놀로지", "KODEX 미국S&P500필수소비재",
-    "KODEX 미국S&P500헬스케어", "KODEX 미국금융테크액티브", "KODEX 미국나스닥100", "KODEX 미국나스닥100데일리커버드콜OTM",
-    "KODEX 미국나스닥100(H)", "KODEX 미국나스닥AI테크액티브", "KODEX 미국달러SOFR금리액티브(합성)",
-    "KODEX 미국드론UAM TOP10", "KODEX 미국러셀2000(H)", "KODEX 미국머니마켓액티브", "KODEX 미국반도체",
-    "KODEX 미국배당다우존스", "KODEX 미국배당다우존스타겟커버드콜", "KODEX 미국배당커버드콜액티브", "KODEX 미국부동산리츠(H)",
-    "KODEX 미국빅테크10(H)", "KODEX 미국서학개미", "KODEX 미국성장커버드콜액티브", "KODEX 미국스마트모빌리티S&P",
-    "KODEX 미국우주항공", "KODEX 미국원자력SMR", "KODEX 미국종합채권ESG액티브(H)", "KODEX 미국클린에너지나스닥",
-    "KODEX 미국테크TOP3플러스", "KODEX 미국휴머노이드로봇", "KODEX 바이오", "KODEX 반도체",
+    "KODEX 미국S&P500변동성확대시커버드", "KODEX 미국S&P500산업재(합성)", "KODEX 미국S&P500액티브", "KODEX 미국S&P500에너지(합성)",
+    "KODEX 미국S&P500유틸리티", "KODEX 미국S&P500(H)", "KODEX 미국S&P500커뮤니케이션", "KODEX 미국S&P500테크놀로지",
+    "KODEX 미국S&P500필수소비재", "KODEX 미국S&P500헬스케어", "KODEX 미국금융테크액티브", "KODEX 미국나스닥100",
+    "KODEX 미국나스닥100데일리커버드콜OTM", "KODEX 미국나스닥100(H)", "KODEX 미국나스닥AI테크액티브",
+    "KODEX 미국달러SOFR금리액티브(합성)", "KODEX 미국드론UAM TOP10", "KODEX 미국러셀2000(H)", "KODEX 미국머니마켓액티브",
+    "KODEX 미국반도체", "KODEX 미국배당다우존스", "KODEX 미국배당다우존스타겟커버드콜", "KODEX 미국배당커버드콜액티브",
+    "KODEX 미국부동산리츠(H)", "KODEX 미국빅테크10(H)", "KODEX 미국서학개미", "KODEX 미국성장커버드콜액티브",
+    "KODEX 미국스마트모빌리티S&P", "KODEX 미국우주항공", "KODEX 미국원자력SMR", "KODEX 미국종합채권ESG액티브(H)",
+    "KODEX 미국클린에너지나스닥", "KODEX 미국테크TOP3플러스", "KODEX 미국휴머노이드로봇", "KODEX 바이오", "KODEX 반도체",
     "KODEX 반도체타겟위클리커버드콜", "KODEX 방산TOP10", "KODEX 배당가치", "KODEX 밸류Plus", "KODEX 삼성그룹",
     "KODEX 삼성전자SK하이닉스채권혼합50", "KODEX 삼성전자채권혼합", "KODEX 성장주", "KODEX 신재생에너지액티브",
     "KODEX 아시아AI반도체exChina액티브", "KODEX 아시아달러채권ESG플러스액티브", "KODEX 우량주", "KODEX 원자력SMR",
     "KODEX 웹툰&드라마", "KODEX 유럽명품TOP10 STOXX", "KODEX 은행", "KODEX 인도Nifty50", "KODEX 인도Nifty미드캡100",
     "KODEX 인도타타그룹", "KODEX 일본부동산리츠(H)", "KODEX 자동차", "KODEX 자율주행액티브", "KODEX 장기종합채권(AA-이상)액티브",
-    "KODEX TDF2030액티브 적격", "KODEX TDF2040액티브 적격", "KODEX TDF2050액티브 적격", "KODEX TDF2060액티브 적격",
+    "KODEX TDF2030액티브 적격", "KODEX TDF2040액티브 적격", "KODEX TDF2050액격", "KODEX TDF2060액티브 적격",
     "KODEX 전고체배터리ESS TOP2플러스", "KODEX 조선TOP10", "KODEX 종합채권(AA-이상)액티브", "KODEX 주주환원고배당주",
     "KODEX 증권", "KODEX 차이나2차전지MSCI(합성)", "KODEX 차이나AI반도체TOP10", "KODEX 차이나AI테크액티브",
     "KODEX 차이나CSI300", "KODEX 차이나A50", "KODEX 차이나H", "KODEX 차이나과창판STAR50(합성)",
@@ -316,92 +313,66 @@ CLUSTER_DEFINITIONS = {
     }
 }
 
-def parse_and_enrich_etf(name: str) -> Dict[str, Any]:
-    """ETF 명칭을 파싱하여 정밀 메타데이터 및 RAG 지식 생성"""
-    brand = name.split()[0]
-    issuer = ISSUER_MAP.get(brand, "기타운용사")
-    
-    is_fx_hedged = "(H)" in name or "(합성 H)" in name
-    is_synthetic = "(합성)" in name or "(합성 H)" in name
-    is_active = "액티브" in name
-    is_covered_call = "커버드콜" in name
+class UniverseParser:
+    """893개 ETF 파서 및 메타데이터 변환기"""
 
-    # 클러스터 결정
-    assigned_cluster_id = "C9_ETC"
-    assigned_cluster_name = "기타 테마 및 혼합형"
-    cluster_desc = "다양한 테마 및 섹터 혼합 포트폴리오"
-    
-    for c_id, c_info in CLUSTER_DEFINITIONS.items():
-        if any(k in name for k in c_info["keywords"]):
-            assigned_cluster_id = c_id
-            assigned_cluster_name = c_info["name"]
-            cluster_desc = c_info["desc"]
-            break
+    @staticmethod
+    def parse_etf(name: str) -> ETFMasterRecord:
+        brand = name.split()[0]
+        issuer = ISSUER_MAP.get(brand, "기타운용사")
+        
+        is_fx_hedged = "(H)" in name or "(합성 H)" in name
+        is_synthetic = "(합성)" in name or "(합성 H)" in name
+        is_active = "액티브" in name
+        is_covered_call = "커버드콜" in name
 
-    # 가상 단축코드 생성 (KRX 실제 매핑 전 고유 6자리 해시 기반 ID)
-    hash_code = hashlib.md5(name.encode("utf-8")).hexdigest()[:6].upper()
-    ticker = f"A{hash_code}"
+        assigned_cluster_id = "C9_ETC"
+        assigned_cluster_name = "기타 테마 및 혼합형"
+        cluster_desc = "다양한 테마 및 섹터 혼합 포트폴리오"
+        
+        for c_id, c_info in CLUSTER_DEFINITIONS.items():
+            if any(k in name for k in c_info["keywords"]):
+                assigned_cluster_id = c_id
+                assigned_cluster_name = c_info["name"]
+                cluster_desc = c_info["desc"]
+                break
 
-    # 테마 태그 생성
-    themes = [brand, assigned_cluster_name]
-    if is_fx_hedged: themes.append("환헤지")
-    if is_active: themes.append("액티브운용")
-    if is_covered_call: themes.append("커버드콜")
-    if is_synthetic: themes.append("합성형")
+        hash_code = hashlib.md5(name.encode("utf-8")).hexdigest()[:6].upper()
+        ticker = f"A{hash_code}"
 
-    full_description = (
-        f"[{name}] {issuer}({brand})에서 운용하는 연금 적격 ETF. "
-        f"속성: {assigned_cluster_name} ({assigned_cluster_id}). {cluster_desc}. "
-        f"환노출/헤지: {'환헤지(H)' if is_fx_hedged else '환노출(UH)'}, "
-        f"운용방식: {'액티브' if is_active else '패시브'}, "
-        f"커버드콜: {'적용' if is_covered_call else '미적용'}."
-    )
+        themes = [brand, assigned_cluster_name]
+        if is_fx_hedged: themes.append("환헤지")
+        if is_active: themes.append("액티브운용")
+        if is_covered_call: themes.append("커버드콜")
+        if is_synthetic: themes.append("합성형")
 
-    return {
-        "ticker": ticker,
-        "name": name,
-        "issuer": issuer,
-        "brand": brand,
-        "cluster_id": assigned_cluster_id,
-        "cluster_name": assigned_cluster_name,
-        "is_fx_hedged": is_fx_hedged,
-        "is_synthetic": is_synthetic,
-        "is_active": is_active,
-        "is_covered_call": is_covered_call,
-        "is_pension_eligible": True,
-        "description": full_description,
-        "key_themes": themes,
-        "expense_ratio": 0.0045,
-        "aum_billion_krw": 150.0  # 기본 추정 AUM
-    }
-
-def main():
-    print("🚀 [Step 1] 연금형 ETF 400여 개 종목 마스터 데이터 파싱 시작...")
-    db = DatabaseManager()
-    
-    unique_names = list(set([n.strip() for n in RAW_ETF_LIST if n.strip()]))
-    records = [parse_and_enrich_etf(name) for name in unique_names]
-    
-    # 1. ETF 마스터 테이블 저장
-    db.insert_etf_master(records)
-    
-    # 2. RAG 지식 문서 적재
-    print("📚 [Step 2] RAG 지식 문서 인덱싱 진행 중...")
-    for r in records:
-        db.insert_rag_document(
-            ticker=r["ticker"],
-            doc_type="FACTSHEET",
-            title=f"ETF 팩트시트: {r['name']}",
-            content=r["description"],
-            metadata={
-                "cluster_id": r["cluster_id"],
-                "issuer": r["issuer"],
-                "is_fx_hedged": r["is_fx_hedged"],
-                "key_themes": r["key_themes"]
-            }
+        full_description = (
+            f"[{name}] {issuer}({brand})에서 운용하는 연금 적격 ETF. "
+            f"속성: {assigned_cluster_name} ({assigned_cluster_id}). {cluster_desc}. "
+            f"환노출/헤지: {'환헤지(H)' if is_fx_hedged else '환노출(UH)'}, "
+            f"운용방식: {'액티브' if is_active else '패시브'}, "
+            f"커버드콜: {'적용' if is_covered_call else '미적용'}."
         )
 
-    print(f"🎉 총 {len(records)}개 연금 적격 ETF가 데이터베이스 및 RAG 인덱스에 성공적으로 구축되었습니다!")
+        return ETFMasterRecord(
+            ticker=ticker,
+            name=name,
+            issuer=issuer,
+            brand=brand,
+            cluster_id=assigned_cluster_id,
+            cluster_name=assigned_cluster_name,
+            is_fx_hedged=is_fx_hedged,
+            is_synthetic=is_synthetic,
+            is_active=is_active,
+            is_covered_call=is_covered_call,
+            is_pension_eligible=True,
+            description=full_description,
+            key_themes=themes,
+            expense_ratio=0.0045,
+            aum_billion_krw=150.0
+        )
 
-if __name__ == "__main__":
-    main()
+    @classmethod
+    def get_all_records(cls) -> List[ETFMasterRecord]:
+        unique_names = list(set([n.strip() for n in RAW_ETF_UNIVERSE if n.strip()]))
+        return [cls.parse_etf(n) for n in unique_names]

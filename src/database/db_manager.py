@@ -1,19 +1,21 @@
 """
-db_manager.py
-머니투데이 ETF 투자왕 대회 [연금형] 데이터베이스 매니저
-PostgreSQL (pgvector) 및 로컬 환경 지원을 위한 하이브리드 커넥터 (Standard Library Native)
+src/database/db_manager.py
+PostgreSQL (pgvector) 및 로컬 무중단 SQLite 하이브리드 데이터베이스 매니저
 """
 
 import os
 import sqlite3
 import json
+from pathlib import Path
 from typing import Optional, List, Dict, Any
+from config.settings import settings
+from src.database.models import ETFMasterRecord
 
 class DatabaseManager:
     """PostgreSQL 및 로컬 DB 연결 및 트랜잭션 관리자"""
 
     def __init__(self, db_url: Optional[str] = None):
-        self.db_url = db_url or os.getenv("DATABASE_URL", "sqlite:///pension_etf.db")
+        self.db_url = db_url or settings.DATABASE_URL
         self.is_postgres = self.db_url.startswith("postgresql")
         self._init_db()
 
@@ -25,23 +27,19 @@ class DatabaseManager:
                 from psycopg2.extras import execute_values
                 self.conn = psycopg2.connect(self.db_url)
                 self.conn.autocommit = True
-                schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
-                with open(schema_path, "r", encoding="utf-8") as f:
-                    with self.conn.cursor() as cur:
-                        cur.execute(f.read())
-                print("✅ PostgreSQL (pgvector) 연결 및 스키마 초기화 완료!")
+                schema_path = Path(__file__).parent / "schema.sql"
+                if schema_path.exists():
+                    with open(schema_path, "r", encoding="utf-8") as f:
+                        with self.conn.cursor() as cur:
+                            cur.execute(f.read())
                 return
             except Exception as e:
                 print(f"⚠️ PostgreSQL 연결 실패 ({e}). SQLite 로컬 모드로 자동 전환합니다.")
                 self.is_postgres = False
 
-        # SQLite 로컬 파일 기반 DB 초기화
         db_path = self.db_url.replace("sqlite:///", "")
-        if not db_path.startswith("/"):
-            db_path = os.path.join(os.path.dirname(__file__), db_path)
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self._create_sqlite_tables()
-        print(f"✅ SQLite 로컬 DB 초기화 완료: {db_path}")
 
     def _create_sqlite_tables(self):
         """SQLite 환경용 스키마 생성"""
@@ -122,7 +120,7 @@ class DatabaseManager:
             self.conn.commit()
             return []
 
-    def insert_etf_master(self, records: List[Dict[str, Any]]):
+    def insert_etf_master(self, records: List[ETFMasterRecord]):
         """ETF 마스터 데이터 일괄 삽입"""
         if self.is_postgres:
             import psycopg2.extras
@@ -139,9 +137,9 @@ class DatabaseManager:
             """
             values = [
                 (
-                    r["ticker"], r["name"], r["issuer"], r["brand"], r["cluster_id"], r["cluster_name"],
-                    r["is_fx_hedged"], r["is_synthetic"], r["is_active"], r["is_covered_call"],
-                    r["is_pension_eligible"], r["description"], r["key_themes"], r["expense_ratio"], r["aum_billion_krw"]
+                    r.ticker, r.name, r.issuer, r.brand, r.cluster_id, r.cluster_name,
+                    r.is_fx_hedged, r.is_synthetic, r.is_active, r.is_covered_call,
+                    r.is_pension_eligible, r.description, r.key_themes, r.expense_ratio, r.aum_billion_krw
                 )
                 for r in records
             ]
@@ -158,15 +156,14 @@ class DatabaseManager:
                     is_pension_eligible, description, key_themes, expense_ratio, aum_billion_krw
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    r["ticker"], r["name"], r["issuer"], r["brand"], r["cluster_id"], r["cluster_name"],
-                    1 if r["is_fx_hedged"] else 0, 1 if r["is_synthetic"] else 0,
-                    1 if r["is_active"] else 0, 1 if r["is_covered_call"] else 0,
-                    1 if r["is_pension_eligible"] else 0, r["description"],
-                    ",".join(r["key_themes"]) if isinstance(r["key_themes"], list) else r["key_themes"],
-                    r["expense_ratio"], r["aum_billion_krw"]
+                    r.ticker, r.name, r.issuer, r.brand, r.cluster_id, r.cluster_name,
+                    1 if r.is_fx_hedged else 0, 1 if r.is_synthetic else 0,
+                    1 if r.is_active else 0, 1 if r.is_covered_call else 0,
+                    1 if r.is_pension_eligible else 0, r.description,
+                    ",".join(r.key_themes) if isinstance(r.key_themes, list) else r.key_themes,
+                    r.expense_ratio, r.aum_billion_krw
                 ))
             self.conn.commit()
-        print(f"💾 {len(records)}개 ETF 마스터 레코드 저장 완료!")
 
     def insert_rag_document(self, ticker: str, doc_type: str, title: str, content: str, metadata: dict = None):
         """RAG 지식 문서 저장"""
