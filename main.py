@@ -33,6 +33,9 @@ def main():
     debate_parser = subparsers.add_parser("committee-debate", help="5대 멀티 에이전트 위원회 교차 토론 및 만장일치 합의 도출")
     debate_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
 
+    # krx-guard
+    subparsers.add_parser("krx-guard", help="KRX ETF 5대 고유 맹점(LP 호가 부재, 환율 드래그, DRIP) 가드레일 상태 점검")
+
     # inav-scan
     subparsers.add_parser("inav-scan", help="iNAV(순자산가치) 괴리율 저평가 차익 기회 및 월배당 스나이핑 스캔")
 
@@ -165,6 +168,33 @@ def main():
         print("📊 [위원회가 최종 승인한 10억 포트폴리오 목표 비중]:")
         for k, v in rep.final_target_weights.items():
             print(f"  • {k:30s} : {v*100:4.1f}% ({(v * 1_000_000_000):,.0f} 원)")
+        print("=" * 80)
+    elif args.command == "krx-guard":
+        from src.quant.krx_market_guard import KRXMarketGuard
+        guard = KRXMarketGuard()
+        
+        print("=" * 80)
+        print("🛡️ [한국거래소(KRX) ETF 5대 고유 맹점 가드레일 실시간 진단]")
+        print("=" * 80)
+        # 1. 09:00~09:05 타임락 & 괴리율 진단
+        t_ok, t_msg = guard.check_time_lock_and_disparity("09:15:00", 23965.0, 23920.0)
+        print(f"1. [LP 호가 타임락 & 괴리율] : {t_msg}")
+
+        # 2. 유동성 및 스프레드 안전망 진단
+        l_ok, l_msg = guard.check_liquidity_safety(adv_20d_krw=3_500_000_000.0, spread_bps=8.5)
+        print(f"2. [거래대금 & 스프레드 필터]: {l_msg} (일 35억원 / 스프레드 8.5bp)")
+
+        # 3. 환헤지(H) vs 환노출(UH) 진단
+        fx_res = guard.determine_fx_hedge_allocation(usd_krw_rate=1386.53)
+        print(f"3. [환율 1,380원대 FX 헤징]   : {fx_res['reason']} (환헤지: {fx_res['H_weight']*100:.0f}%, 환노출: {fx_res['UH_weight']*100:.0f}%)")
+
+        # 4. 연금계좌 15.4% 비과세 DRIP 복리 시뮬레이션
+        drip = guard.calculate_pension_drip_reinvestment(dps_krw=65.0, shares_owned=16722, opening_price=23965.0)
+        print(f"4. [연금 15.4% 비과세 DRIP]   : 분배금 {drip['total_dividend_inflow_krw']:,.0f}원 발생 -> 시초가 {drip['reinvest_shares']}주 즉시 100% 복리 재투자!")
+
+        # 5. 밸류업 vs 글로벌 AI 듀얼 모멘텀
+        rot = guard.calculate_valueup_vs_ai_rotation(valueup_ret_20d=0.038, ai_tech_ret_20d=0.072)
+        print(f"5. [밸류업 vs AI 순환매 틸팅]: {rot['reason']}")
         print("=" * 80)
     elif args.command == "inav-scan":
         from src.database.db_manager import DatabaseManager

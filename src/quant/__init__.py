@@ -10,6 +10,7 @@ from src.quant.stress_tester import PortfolioStressTester
 from src.quant.inav_arbitrage import INAVArbitrageEngine
 from src.quant.trailing_stop import TrailingProfitLockEngine
 from src.quant.advanced_analytics import AdvancedQuantAnalytics
+from src.quant.krx_market_guard import KRXMarketGuard
 
 __all__ = [
     "ComplianceHarness", 
@@ -26,5 +27,6 @@ __all__ = [
     "PortfolioStressTester",
     "INAVArbitrageEngine",
     "TrailingProfitLockEngine",
-    "AdvancedQuantAnalytics"
+    "AdvancedQuantAnalytics",
+    "KRXMarketGuard"
 ]
