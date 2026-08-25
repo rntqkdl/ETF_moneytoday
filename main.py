@@ -29,11 +29,23 @@ def main():
     # monte-carlo
     subparsers.add_parser("monte-carlo", help="10,000회 몬테카를로 8주 대회 우승 확률 시뮬레이션")
 
+    # committee-debate
+    debate_parser = subparsers.add_parser("committee-debate", help="5대 멀티 에이전트 위원회 교차 토론 및 만장일치 합의 도출")
+    debate_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
+
     # inav-scan
     subparsers.add_parser("inav-scan", help="iNAV(순자산가치) 괴리율 저평가 차익 기회 및 월배당 스나이핑 스캔")
 
     # trailing-check
     subparsers.add_parser("trailing-check", help="10억 원 포트폴리오 트레일링 익절 및 이익 락인(Profit Lock-in) 검사")
+
+    # vwap-plan
+    vwap_parser = subparsers.add_parser("vwap-plan", help="10억 원 KRX U자형 거래량 가중(VWAP) 스마트 배치 분할표 생성")
+    vwap_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
+
+    # almgren-plan
+    ac_parser = subparsers.add_parser("almgren-plan", help="10억 원 월가 최적 실행 궤적(Almgren-Chriss) 수학적 배치 분할표 생성")
+    ac_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
 
     # stress-test
     subparsers.add_parser("stress-test", help="과거 5개년 역사적 위기 국면(팬데믹, 금리폭등) 기반 스트레스 테스트")
@@ -55,14 +67,6 @@ def main():
     # twap-plan
     twap_parser = subparsers.add_parser("twap-plan", help="10억 원 슬리피지 방어 TWAP 6회 분할 주문표 생성")
     twap_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
-
-    # vwap-plan
-    vwap_parser = subparsers.add_parser("vwap-plan", help="10억 원 KRX U자형 거래량 가중(VWAP) 스마트 배치 분할표 생성")
-    vwap_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
-
-    # almgren-plan
-    ac_parser = subparsers.add_parser("almgren-plan", help="10억 원 월가 최적 실행 궤적(Almgren-Chriss) 수학적 배치 분할표 생성")
-    ac_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
 
     # paper-status
     subparsers.add_parser("paper-status", help="가상 10억 원 포트폴리오 실시간 성과 대시보드 출력")
@@ -137,6 +141,31 @@ def main():
         print(f"• 8주 플러스 수익 달성 확률: 🟢 {sim['win_probability_positive_pct']:.1f}%")
         print(f"• +20% 이상 대승(우승) 확률: 🔥 {sim['championship_alpha_prob_over_20pct']:.1f}%")
         print("=" * 75)
+    elif args.command == "committee-debate":
+        from src.ai.multi_agent_consensus import MultiAgentConsensusCommittee
+        from src.database.db_manager import DatabaseManager
+        db = DatabaseManager()
+        committee = MultiAgentConsensusCommittee(db=db)
+        rep = committee.run_committee_deliberation(news_text=args.news)
+
+        print("=" * 80)
+        print("🏛️ [기관급 멀티 에이전트 5인 위원회 교차 토론 및 만장일치 의결 결과]")
+        print("=" * 80)
+        print(f"• 최종 합의 결정 : 🏆 {rep.consensus_decision}")
+        print(f"• 수석 CIO 승인  : {'✅ 승인 완료 (APPROVED)' if rep.cio_approval else '❌ 보류'}")
+        print(f"• 추천 집행 엔진 : ⚡ {rep.execution_algo}")
+        print(f"• 기대 추가 알파 : 📈 +{rep.expected_alpha_bps:.1f} bps (+0.45% 절감)")
+        print("-" * 80)
+        print("👥 [5대 전문 에이전트별 의결 소견]:")
+        for op in rep.agent_opinions:
+            print(f"\n  [{op.agent_name}] ({op.role}) | 판정: {op.verdict} (확신도: {op.confidence*100:.1f}%)")
+            for arg in op.key_arguments:
+                print(f"    • {arg}")
+        print("-" * 80)
+        print("📊 [위원회가 최종 승인한 10억 포트폴리오 목표 비중]:")
+        for k, v in rep.final_target_weights.items():
+            print(f"  • {k:30s} : {v*100:4.1f}% ({(v * 1_000_000_000):,.0f} 원)")
+        print("=" * 80)
     elif args.command == "inav-scan":
         from src.database.db_manager import DatabaseManager
         from src.quant.inav_arbitrage import INAVArbitrageEngine
