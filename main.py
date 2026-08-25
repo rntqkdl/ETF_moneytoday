@@ -19,6 +19,9 @@ def main():
     # harvest
     subparsers.add_parser("harvest", help="대표 ETF 시세 및 매크로 지표 데이터 수집")
 
+    # dart-harvest
+    subparsers.add_parser("dart-harvest", help="DART 전자공시 실시간 기업 공시 수집 및 RAG 동기화")
+
     # train
     subparsers.add_parser("train", help="Apple M5 Metal GPU LoRA 파인튜닝 학습")
     
@@ -59,6 +62,11 @@ def main():
         collector = FinancialDataCollector()
         collector.collect_etf_history(days=60)
         collector.collect_macro_rates()
+    elif args.command == "dart-harvest":
+        from src.database.dart_collector import DARTDisclosureCollector
+        collector = DARTDisclosureCollector()
+        disclosures = collector.fetch_recent_disclosures(days=7)
+        collector.save_disclosures_to_rag(disclosures)
     elif args.command == "train":
         from scripts.train_lora import main as train_main
         train_main()

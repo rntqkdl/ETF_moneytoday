@@ -1,13 +1,19 @@
 """
 config/settings.py
-연금형 ETF 퀀트 시스템 전역 설정 및 환경 변수 관리
+연금형 ETF 퀀트 시스템 전역 설정 및 환경 변수 관리 (.env 자동 로드 지원)
 """
 
 import os
 from pathlib import Path
 from pydantic import BaseModel
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# .env 파일 로드
+env_path = BASE_DIR / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
 
 class Settings(BaseModel):
     PROJECT_NAME: str = "MoneyToday Pension ETF Quant System"
@@ -19,6 +25,11 @@ class Settings(BaseModel):
         f"sqlite:///{BASE_DIR}/pension_etf.db"
     )
     
+    # API 키 및 웹훅
+    SLACK_WEBHOOK_URL: str = os.getenv("SLACK_WEBHOOK_URL", "")
+    DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
+    DART_API_KEY: str = os.getenv("DART_API_KEY", "")
+
     # 로컬 LLM 및 어댑터 경로
     BASE_MODEL_NAME: str = "mlx-community/Qwen2.5-7B-Instruct-4bit"
     ADAPTER_PATH: str = str(BASE_DIR / "adapters" / "pension_qwen7b_lora")
