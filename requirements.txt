@@ -8,3 +8,6 @@ numpy>=1.26.0
 pandas>=2.2.0
 networkx>=3.2.0
 psycopg2-binary>=2.9.9
+yfinance>=0.2.36
+finance-datareader>=0.9.50
+pykrx>=1.0.40
