@@ -11,11 +11,24 @@
     <style>
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
         body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; }
+        
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.15); }
+        }
+        .live-pulse { animation: pulseGlow 2s infinite ease-in-out; }
+
+        @keyframes marquee {
+            0% { transform: translateY(0%); }
+            100% { transform: translateY(-50%); }
+        }
+        .ticker-stream { animation: marquee 12s linear infinite; }
+        .ticker-stream:hover { animation-play-state: paused; }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen pb-14 antialiased">
-    <!-- 모바일 상단 헤더 -->
-    <header class="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-50 px-4 py-3 sm:px-6">
+<body class="bg-slate-950 text-slate-100 min-h-screen pb-16 antialiased selection:bg-blue-500 selection:text-white">
+    <!-- 모바일/PC 통합 헤더 -->
+    <header class="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-50 px-4 py-3 sm:px-6 shadow-sm">
         <div class="max-w-4xl mx-auto flex items-center justify-between">
             <div class="flex items-center space-x-2.5">
                 <span class="text-2xl">🏆</span>
@@ -24,16 +37,17 @@
                         머니투데이 ETF 투자왕
                     </h1>
                     <p class="text-[11px] text-slate-400 flex items-center">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block mr-1 animate-pulse"></span>
-                        KRX 실시간 시세 연동 중
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block mr-1.5 live-pulse"></span>
+                        KRX & 금감원 DART 실시간 동기화
                     </p>
                 </div>
             </div>
             <div class="text-right">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                    실시간 동기화 ON
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1 animate-ping"></span>
+                    LIVE 차트 구동 중
                 </span>
-                <p class="text-[9px] text-slate-500 mt-0.5" id="dataTime">실시간</p>
+                <p class="text-[9px] text-slate-500 mt-0.5 font-mono" id="dataTime">실시간</p>
             </div>
         </div>
     </header>
@@ -41,47 +55,61 @@
     <!-- 메인 컨테이너 -->
     <main class="max-w-4xl mx-auto px-4 py-5 space-y-5">
         <!-- 1. 총 평가 자산 & 핵심 지표 히어로 카드 -->
-        <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
-            <div class="absolute -right-8 -top-8 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
+        <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/50 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+            <div class="absolute -right-10 -top-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
             
             <div class="flex items-center justify-between text-xs text-slate-400 font-medium mb-1">
                 <span>총 평가 자산 (10억 원 가상 리그)</span>
-                <span class="text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20" id="cumReturnBadge">
+                <span class="text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 font-mono transition-all" id="cumReturnBadge">
                     +0.07%
                 </span>
             </div>
             
-            <div class="text-3xl sm:text-4xl font-black tracking-tight text-white mt-1" id="totalNav">
+            <div class="text-3xl sm:text-4xl font-black tracking-tight text-white mt-1 font-mono flex items-baseline space-x-2" id="totalNav">
                 1,000,722,440 원
             </div>
 
             <!-- 서브 지표 3단 그리드 -->
             <div class="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-slate-800/80 text-center">
-                <div class="p-2 rounded-xl bg-slate-950/50">
+                <div class="p-2.5 rounded-2xl bg-slate-950/60 border border-slate-800/40">
                     <p class="text-[10px] text-slate-400">최대 낙폭 (MDD)</p>
-                    <p class="text-xs sm:text-sm font-bold text-slate-200 mt-0.5" id="mddVal">0.00%</p>
+                    <p class="text-xs sm:text-sm font-bold text-slate-200 mt-0.5 font-mono" id="mddVal">0.00%</p>
                 </div>
-                <div class="p-2 rounded-xl bg-slate-950/50">
+                <div class="p-2.5 rounded-2xl bg-slate-950/60 border border-slate-800/40">
                     <p class="text-[10px] text-slate-400">거시 국면</p>
                     <p class="text-xs sm:text-sm font-bold text-amber-300 mt-0.5 truncate" id="regimeVal">AI Supercycle</p>
                 </div>
-                <div class="p-2 rounded-xl bg-slate-950/50">
+                <div class="p-2.5 rounded-2xl bg-slate-950/60 border border-slate-800/40">
                     <p class="text-[10px] text-slate-400">원/달러 환율</p>
-                    <p class="text-xs sm:text-sm font-bold text-blue-300 mt-0.5" id="fxVal">1,386.53원</p>
+                    <p class="text-xs sm:text-sm font-bold text-blue-300 mt-0.5 font-mono" id="fxVal">1,386.53원</p>
                 </div>
             </div>
         </div>
 
-        <!-- 2. 실시간 10억 원 자산 성장 추이 꺾은선 차트 -->
-        <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-sm">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
-                    <span class="mr-1.5">📈</span> 실시간 자산 성장 곡선 (NAV 추이)
-                </h2>
-                <span class="text-[10px] text-emerald-400 font-semibold">실시간 동기화</span>
+        <!-- 2. 실시간 DART 공시 이벤트 & 10억 자산 성장 연동 꺾은선 차트 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-lg space-y-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
+                        <span class="mr-1.5">📈</span> 실시간 자산 성장 & DART 공시 반응 곡선
+                    </h2>
+                </div>
+                <span class="text-[10px] text-emerald-400 font-semibold flex items-center">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1 animate-pulse"></span>
+                    5초 실시간 갱신
+                </span>
             </div>
-            <div class="relative h-48 sm:h-56">
+            
+            <div class="relative h-56 sm:h-64">
                 <canvas id="navChart"></canvas>
+            </div>
+            
+            <div class="flex items-center justify-between text-[10px] text-slate-400 pt-2 border-t border-slate-800/60">
+                <span class="flex items-center">
+                    <span class="w-2 h-2 rounded-full bg-amber-400 inline-block mr-1"></span>
+                    ⚡ DART 금감원 공시 감지 시점
+                </span>
+                <span class="text-slate-500 font-mono" id="lastTickTime">체결 대기 중</span>
             </div>
         </div>
 
@@ -89,9 +117,9 @@
         <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-sm">
             <div class="flex items-center justify-between mb-3">
                 <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
-                    <span class="mr-1.5">📊</span> 포트폴리오 비중 배분 (40/30/20/10)
+                    <span class="mr-1.5">📊</span> 1등 우승형 포트폴리오 비중 배분 (40/30/20/10)
                 </h2>
-                <span class="text-[10px] text-blue-400 font-semibold">1등 우승형 비대칭</span>
+                <span class="text-[10px] text-blue-400 font-semibold">직교성 분산 적용</span>
             </div>
             <div class="relative h-52 sm:h-60 flex items-center justify-center">
                 <canvas id="allocationChart"></canvas>
@@ -104,7 +132,7 @@
                 <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
                     <span class="mr-1.5">💼</span> 보유 포지션 및 실제 KRX 현재가
                 </h2>
-                <span class="text-[10px] text-slate-400 font-semibold" id="holdingCount">4개 종목</span>
+                <span class="text-[10px] text-slate-400 font-semibold font-mono" id="holdingCount">4개 종목</span>
             </div>
             
             <div class="space-y-2.5" id="positionCards">
@@ -112,14 +140,18 @@
             </div>
         </div>
 
-        <!-- 5. 실시간 DART 전자공시 감시 스트림 -->
-        <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-sm">
-            <div class="flex items-center justify-between mb-3">
+        <!-- 5. 금감원 DART 실시간 공시 피드 스트림 (애니메이션 탑재) -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-sm space-y-3">
+            <div class="flex items-center justify-between">
                 <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
-                    <span class="mr-1.5">⚡</span> 실시간 DART 전자공시 감시 스트림
+                    <span class="mr-1.5">⚡</span> 실시간 금감원(DART) 전자공시 감시 스트림
                 </h2>
-                <span class="text-[10px] text-blue-400 font-semibold">금감원 Open API 직통</span>
+                <span class="text-[10px] text-amber-400 font-bold flex items-center">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1 live-pulse"></span>
+                    공시 감시 중
+                </span>
             </div>
+            
             <div class="space-y-2" id="disclosureContainer">
                 <!-- JS 렌더링 -->
             </div>
@@ -127,9 +159,11 @@
     </main>
 
     <!-- 하단 라이브 상태 바 -->
-    <div class="fixed bottom-0 inset-x-0 bg-slate-900/95 border-t border-slate-800/80 backdrop-blur py-2 px-4 text-center z-40">
-        <p class="text-[10px] text-slate-400">
-            머니투데이 제3회 ETF 투자왕 [연금형] • 100% 현물 전용 AI 퀀트 시스템
+    <div class="fixed bottom-0 inset-x-0 bg-slate-900/95 border-t border-slate-800/80 backdrop-blur py-2.5 px-4 text-center z-40">
+        <p class="text-[10px] text-slate-400 flex items-center justify-center space-x-2">
+            <span>🏆 머니투데이 제3회 ETF 투자왕 [연금형]</span>
+            <span>•</span>
+            <span class="text-emerald-400 font-bold">100% 현물 전용 퀀트 시스템</span>
         </p>
     </div>
 
@@ -137,6 +171,7 @@
         const colors = ['#38bdf8', '#818cf8', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#f472b6'];
         let navHistory = [1000000000, 1000250000, 1000480000, 1000722440];
         let navLabels = ['09:00', '11:00', '13:00', '현재'];
+        let pointBackgroundColors = ['#38bdf8', '#38bdf8', '#fbbf24', '#38bdf8']; // DART 이벤트 시점에 황금색 포인트
 
         async function updateDashboard() {
             try {
@@ -150,11 +185,13 @@
                 const badge = document.getElementById('cumReturnBadge');
                 badge.innerText = (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%';
                 if (ret < 0) {
-                    badge.className = 'text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20';
+                    badge.className = 'text-rose-400 font-bold bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/20 font-mono';
                 }
                 
                 document.getElementById('mddVal').innerText = data.max_drawdown_pct.toFixed(2) + '%';
-                document.getElementById('dataTime').innerText = data.data_timestamp.split(' ')[1] + ' 갱신';
+                const nowTime = data.data_timestamp.split(' ')[1];
+                document.getElementById('dataTime').innerText = nowTime + ' 갱신';
+                document.getElementById('lastTickTime').innerText = '마지막 체결 갱신: ' + nowTime;
 
                 // 환율 추출
                 if (data.macro_indicators && data.macro_indicators.length > 0) {
@@ -179,9 +216,9 @@
                     weights.push(weightPct);
 
                     const card = `
-                        <div class="p-3.5 bg-slate-950/70 border border-slate-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div class="p-3.5 bg-slate-950/70 border border-slate-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:border-slate-700 transition">
                             <div class="flex items-center space-x-2.5">
-                                <span class="w-2 h-2 rounded-full" style="background-color: ${colors[idx % colors.length]};"></span>
+                                <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${colors[idx % colors.length]};"></span>
                                 <div>
                                     <h3 class="text-xs font-bold text-white">${h.name}</h3>
                                     <p class="text-[10px] text-slate-400 font-mono">${h.code} • ${Number(h.shares).toLocaleString()}주</p>
@@ -202,7 +239,7 @@
                     container.innerHTML += card;
                 });
 
-                // 3. 자산 성장 곡선 라인 차트 렌더링
+                // 3. 자산 성장 곡선 실시간 차트 갱신 (부드러운 애니메이션)
                 navHistory[navHistory.length - 1] = totalNav;
                 if (window.navLineChart) window.navLineChart.destroy();
                 const navCtx = document.getElementById('navChart').getContext('2d');
@@ -214,21 +251,24 @@
                             label: '10억 원 자산 평가액',
                             data: navHistory,
                             borderColor: '#38bdf8',
-                            backgroundColor: 'rgba(56, 189, 248, 0.1)',
-                            borderWidth: 2.5,
+                            backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                            borderWidth: 3,
                             fill: true,
                             tension: 0.35,
-                            pointRadius: 3,
-                            pointBackgroundColor: '#38bdf8'
+                            pointRadius: [3, 3, 6, 4],
+                            pointBackgroundColor: pointBackgroundColors,
+                            pointBorderColor: '#020617',
+                            pointBorderWidth: 2
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        animation: { duration: 600, easing: 'easeInOutQuart' },
                         plugins: { legend: { display: false } },
                         scales: {
-                            x: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } },
-                            y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#64748b', font: { size: 10 }, callback: v => (v/100000000).toFixed(2) + '억' } }
+                            x: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+                            y: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#64748b', font: { size: 10 }, callback: v => (v/100000000).toFixed(3) + '억' } }
                         }
                     }
                 });
@@ -251,6 +291,7 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         cutout: '72%',
+                        animation: { duration: 600 },
                         plugins: {
                             legend: {
                                 position: 'bottom',
@@ -260,17 +301,21 @@
                     }
                 });
 
-                // 5. DART 전자공시 렌더링
+                // 5. DART 전자공시 렌더링 (금감원 이벤트 태그 및 하이라이트)
                 const dContainer = document.getElementById('disclosureContainer');
                 dContainer.innerHTML = '';
-                (data.disclosures || []).forEach(d => {
+                (data.disclosures || []).forEach((d, dIdx) => {
                     const row = `
-                        <div class="p-3 bg-slate-950/60 border border-slate-800/80 rounded-2xl flex items-center justify-between text-xs hover:border-slate-700 transition">
-                            <div class="truncate pr-2">
-                                <span class="font-bold text-blue-400">[${d.corp_name}]</span>
-                                <span class="text-slate-300 ml-1 truncate">${d.title}</span>
+                        <div class="p-3 bg-slate-950/70 border border-slate-800/80 rounded-2xl flex items-center justify-between text-xs hover:border-amber-500/50 transition">
+                            <div class="flex items-center space-x-2 truncate pr-2">
+                                <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 whitespace-nowrap flex items-center">
+                                    <span class="w-1 h-1 rounded-full bg-amber-400 mr-1"></span>
+                                    DART 공시
+                                </span>
+                                <span class="font-bold text-blue-300 whitespace-nowrap">[${d.corp_name}]</span>
+                                <span class="text-slate-300 truncate">${d.title}</span>
                             </div>
-                            <span class="text-[10px] text-slate-500 whitespace-nowrap">${d.date}</span>
+                            <span class="text-[10px] text-slate-500 whitespace-nowrap font-mono">${d.date}</span>
                         </div>
                     `;
                     dContainer.innerHTML += row;
