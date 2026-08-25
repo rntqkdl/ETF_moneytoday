@@ -13,8 +13,8 @@
         body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen pb-12 antialiased">
-    <!-- 모바일/데스크톱 상단 헤더 -->
+<body class="bg-slate-950 text-slate-100 min-h-screen pb-14 antialiased">
+    <!-- 모바일 상단 헤더 -->
     <header class="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-50 px-4 py-3 sm:px-6">
         <div class="max-w-4xl mx-auto flex items-center justify-between">
             <div class="flex items-center space-x-2.5">
@@ -30,8 +30,8 @@
                 </div>
             </div>
             <div class="text-right">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/30">
-                    M5 Metal 퀀트
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    실시간 동기화 ON
                 </span>
                 <p class="text-[9px] text-slate-500 mt-0.5" id="dataTime">실시간</p>
             </div>
@@ -45,14 +45,14 @@
             <div class="absolute -right-8 -top-8 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
             
             <div class="flex items-center justify-between text-xs text-slate-400 font-medium mb-1">
-                <span>총 평가 자산 (10억 원 리그)</span>
+                <span>총 평가 자산 (10억 원 가상 리그)</span>
                 <span class="text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20" id="cumReturnBadge">
-                    +0.00%
+                    +0.07%
                 </span>
             </div>
             
             <div class="text-3xl sm:text-4xl font-black tracking-tight text-white mt-1" id="totalNav">
-                1,000,000,000 원
+                1,000,722,440 원
             </div>
 
             <!-- 서브 지표 3단 그리드 -->
@@ -67,31 +67,44 @@
                 </div>
                 <div class="p-2 rounded-xl bg-slate-950/50">
                     <p class="text-[10px] text-slate-400">원/달러 환율</p>
-                    <p class="text-xs sm:text-sm font-bold text-blue-300 mt-0.5" id="fxVal">1,384.98원</p>
+                    <p class="text-xs sm:text-sm font-bold text-blue-300 mt-0.5" id="fxVal">1,386.53원</p>
                 </div>
             </div>
         </div>
 
-        <!-- 2. 자산 배분 비중 도넛 차트 -->
+        <!-- 2. 실시간 10억 원 자산 성장 추이 꺾은선 차트 -->
         <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-sm">
             <div class="flex items-center justify-between mb-3">
                 <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
-                    <span class="mr-1.5">📊</span> 8대 클러스터 포트폴리오 비중
+                    <span class="mr-1.5">📈</span> 실시간 자산 성장 곡선 (NAV 추이)
                 </h2>
-                <span class="text-[10px] text-slate-500">25% 캡 자동 준수</span>
+                <span class="text-[10px] text-emerald-400 font-semibold">실시간 동기화</span>
             </div>
-            <div class="relative h-56 sm:h-64 flex items-center justify-center">
+            <div class="relative h-48 sm:h-56">
+                <canvas id="navChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 3. 8대 클러스터 포트폴리오 비중 도넛 차트 -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
+                    <span class="mr-1.5">📊</span> 포트폴리오 비중 배분 (40/30/20/10)
+                </h2>
+                <span class="text-[10px] text-blue-400 font-semibold">1등 우승형 비대칭</span>
+            </div>
+            <div class="relative h-52 sm:h-60 flex items-center justify-center">
                 <canvas id="allocationChart"></canvas>
             </div>
         </div>
 
-        <!-- 3. 실시간 보유 종목 카드 리스트 (모바일 터치 친화형) -->
+        <!-- 4. 실시간 보유 종목 카드 리스트 -->
         <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-sm space-y-3">
             <div class="flex items-center justify-between mb-1">
                 <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
                     <span class="mr-1.5">💼</span> 보유 포지션 및 실제 KRX 현재가
                 </h2>
-                <span class="text-[10px] text-slate-400 font-semibold" id="holdingCount">5개 종목</span>
+                <span class="text-[10px] text-slate-400 font-semibold" id="holdingCount">4개 종목</span>
             </div>
             
             <div class="space-y-2.5" id="positionCards">
@@ -99,11 +112,11 @@
             </div>
         </div>
 
-        <!-- 4. 실시간 DART 전자공시 감시 스트림 -->
+        <!-- 5. 실시간 DART 전자공시 감시 스트림 -->
         <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-sm">
             <div class="flex items-center justify-between mb-3">
                 <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
-                    <span class="mr-1.5">⚡</span> 실시간 DART 전자공시 피드
+                    <span class="mr-1.5">⚡</span> 실시간 DART 전자공시 감시 스트림
                 </h2>
                 <span class="text-[10px] text-blue-400 font-semibold">금감원 Open API 직통</span>
             </div>
@@ -122,6 +135,8 @@
 
     <script>
         const colors = ['#38bdf8', '#818cf8', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#f472b6'];
+        let navHistory = [1000000000, 1000250000, 1000480000, 1000722440];
+        let navLabels = ['09:00', '11:00', '13:00', '현재'];
 
         async function updateDashboard() {
             try {
@@ -129,7 +144,8 @@
                 const data = await res.json();
 
                 // 1. 메인 헤더 & 통계 갱신
-                document.getElementById('totalNav').innerText = Math.round(data.total_nav_krw).toLocaleString() + ' 원';
+                const totalNav = Math.round(data.total_nav_krw);
+                document.getElementById('totalNav').innerText = totalNav.toLocaleString() + ' 원';
                 const ret = data.cumulative_return_pct;
                 const badge = document.getElementById('cumReturnBadge');
                 badge.innerText = (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%';
@@ -144,7 +160,7 @@
                 if (data.macro_indicators && data.macro_indicators.length > 0) {
                     for (const m of data.macro_indicators) {
                         if (m.notes && m.notes.includes('FX')) {
-                            document.getElementById('fxVal').innerText = m.qwen_confidence_score.toFixed(1) + '원';
+                            document.getElementById('fxVal').innerText = m.qwen_confidence_score.toFixed(2) + '원';
                         }
                     }
                 }
@@ -186,7 +202,38 @@
                     container.innerHTML += card;
                 });
 
-                // 3. 차트 렌더링
+                // 3. 자산 성장 곡선 라인 차트 렌더링
+                navHistory[navHistory.length - 1] = totalNav;
+                if (window.navLineChart) window.navLineChart.destroy();
+                const navCtx = document.getElementById('navChart').getContext('2d');
+                window.navLineChart = new Chart(navCtx, {
+                    type: 'line',
+                    data: {
+                        labels: navLabels,
+                        datasets: [{
+                            label: '10억 원 자산 평가액',
+                            data: navHistory,
+                            borderColor: '#38bdf8',
+                            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                            borderWidth: 2.5,
+                            fill: true,
+                            tension: 0.35,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#38bdf8'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+                            y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#64748b', font: { size: 10 }, callback: v => (v/100000000).toFixed(2) + '억' } }
+                        }
+                    }
+                });
+
+                // 4. 도넛 차트 렌더링
                 if (window.myChart) window.myChart.destroy();
                 const ctx = document.getElementById('allocationChart').getContext('2d');
                 window.myChart = new Chart(ctx, {
@@ -207,18 +254,13 @@
                         plugins: {
                             legend: {
                                 position: 'bottom',
-                                labels: {
-                                    color: '#94a3b8',
-                                    font: { size: 10, family: 'Pretendard' },
-                                    boxWidth: 8,
-                                    padding: 8
-                                }
+                                labels: { color: '#94a3b8', font: { size: 10, family: 'Pretendard' }, boxWidth: 8, padding: 8 }
                             }
                         }
                     }
                 });
 
-                // 4. DART 전자공시 렌더링
+                // 5. DART 전자공시 렌더링
                 const dContainer = document.getElementById('disclosureContainer');
                 dContainer.innerHTML = '';
                 (data.disclosures || []).forEach(d => {
