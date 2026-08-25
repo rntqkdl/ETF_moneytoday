@@ -1,0 +1,162 @@
+{
+  "name": "MoneyToday Pension ETF Multi-Agent Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 8 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "node-cron-trigger",
+      "name": "08:30 매일 아침 트리거",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://finance.naver.com/news/mainnews.naver",
+        "options": {
+          "headers": {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+          }
+        }
+      },
+      "id": "node-fetch-news",
+      "name": "금융 속보 수집 (Polite Delay)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/rag/search",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.news_headline }}"
+            },
+            {
+              "name": "top_k",
+              "value": "5"
+            }
+          ]
+        }
+      },
+      "id": "node-rag-query",
+      "name": "RAG 지식 검색",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/v1/chat/completions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"qwen2.5:7b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"당신은 머니투데이 연금형 ETF 투자대회의 수석 퀀트 에이전트입니다. 8대 클러스터에 대한 확신도와 비중 뷰를 JSON으로만 출력하십시오.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.rag_prompt) }}\n    }\n  ],\n  \"temperature\": 0.1\n}"
+      },
+      "id": "node-qwen-lora",
+      "name": "M5 Host Qwen LoRA 추론",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ JSON.parse($json.choices[0].message.content).confidence_score }}",
+              "operation": "largerEqual",
+              "value2": 0.75
+            }
+          ]
+        }
+      },
+      "id": "node-confidence-gate",
+      "name": "투자 확신도 게이트 (>= 0.75)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "@pension_etf_alert",
+        "text": "=🚀 [연금형 ETF 투자왕] 고확신도 알파 리밸런싱 시그널 발동!\n\n• 매크로 국면: {{ JSON.parse($json.choices[0].message.content).regime }}\n• 종합 확신도: {{ JSON.parse($json.choices[0].message.content).confidence_score * 100 }}%\n• 현금 파킹: {{ JSON.parse($json.choices[0].message.content).cash_park_ratio * 100 }}%\n• 근거: {{ JSON.parse($json.choices[0].message.content).reasoning }}",
+        "additionalFields": {}
+      },
+      "id": "node-telegram-alert",
+      "name": "텔레그램 리포트 발송",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1300, 200]
+    }
+  ],
+  "connections": {
+    "08:30 매일 아침 트리거": {
+      "main": [
+        [
+          {
+            "node": "금융 속보 수집 (Polite Delay)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "금융 속보 수집 (Polite Delay)": {
+      "main": [
+        [
+          {
+            "node": "RAG 지식 검색",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG 지식 검색": {
+      "main": [
+        [
+          {
+            "node": "M5 Host Qwen LoRA 추론",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M5 Host Qwen LoRA 추론": {
+      "main": [
+        [
+          {
+            "node": "투자 확신도 게이트 (>= 0.75)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "투자 확신도 게이트 (>= 0.75)": {
+      "main": [
+        [
+          {
+            "node": "텔레그램 리포트 발송",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

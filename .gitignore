@@ -1,0 +1,20 @@
+# Python & OS
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+venv/
+.env
+.env.*
+*.local
+
+# Database & Big Data
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Model Weights & Binary Checkpoints (Code is tracked, binary weights ignored)
+adapters/
+models/
+data/*.jsonl
