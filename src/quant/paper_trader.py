@@ -18,7 +18,6 @@ class PaperTradingAccount:
     def _ensure_init(self):
         row = self.db.execute_query("SELECT * FROM paper_portfolio_state WHERE id = 1")
         if not row:
-            # 10억 원 초기 포트폴리오 (40/30/20/10 클러스터 직교성 배분)
             initial_holdings = {
                 "KODEX 미국AI반도체TOP3플러스": {"shares": 16722, "avg_price": 23920.0, "target_weight": 0.40, "valuation_krw": 400000000.0},
                 "TIGER 미국AI전력SMR": {"shares": 18987, "avg_price": 15800.0, "target_weight": 0.30, "valuation_krw": 300000000.0},
@@ -52,9 +51,19 @@ class PaperTradingAccount:
         total_eval = 0.0
         trade_logs = []
 
-        # 최신 종가 조회 맵
-        price_rows = self.db.execute_query("SELECT ticker, name, close_price FROM etf_daily_prices WHERE trade_date = (SELECT MAX(trade_date) FROM etf_daily_prices)")
-        price_map = {r["name"]: float(r["close_price"]) for r in price_rows if r["name"]}
+        # 최신 종가 조회 맵 (etf_daily_prices와 etf_master 조인)
+        price_rows = self.db.execute_query("""
+            SELECT m.name, p.ticker, p.close_price 
+            FROM etf_daily_prices p
+            JOIN etf_master m ON p.ticker = m.ticker
+            WHERE p.trade_date = (SELECT MAX(trade_date) FROM etf_daily_prices)
+        """)
+        price_map = {}
+        for r in price_rows:
+            if r["name"]:
+                price_map[r["name"]] = float(r["close_price"])
+            if r["ticker"]:
+                price_map[r["ticker"]] = float(r["close_price"])
 
         for name, weight in target_weights.items():
             price = price_map.get(name, 15000.0)
@@ -75,17 +84,17 @@ class PaperTradingAccount:
             if diff_shares != 0:
                 action = "BUY" if diff_shares > 0 else "SELL"
                 trade_logs.append((
-                    name, action, abs(diff_shares), price, abs(diff_shares * price), 0.0,
+                    name, action, abs(diff_shares), price, abs(diff_shares * price),
                     datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 ))
 
-        # 거래 원장 기록
+        # 거래 원장 기록 (paper_trades_ledger 컬럼 매핑)
         for t in trade_logs:
             self.db.execute_query("""
             INSERT INTO paper_trades_ledger (
-                ticker_name, action, shares, execution_price, total_amount_krw, slippage_loss_krw, executed_at
+                trade_timestamp, ticker_name, action, shares, price, amount_krw, reasoning
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, t)
+            """, (t[5], t[0], t[1], t[2], t[3], t[4], reasoning))
 
         # 상태 업데이트
         cum_ret = ((total_eval - 1_000_000_000.0) / 1_000_000_000.0) * 100.0
