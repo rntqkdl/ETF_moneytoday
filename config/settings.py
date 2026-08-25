@@ -17,7 +17,7 @@ if env_path.exists():
 
 class Settings(BaseModel):
     PROJECT_NAME: str = "MoneyToday Pension ETF Quant System"
-    VERSION: str = "2.0.0"
+    VERSION: str = "2.1.0"
     
     # 데이터베이스 설정
     DATABASE_URL: str = os.getenv(
@@ -39,8 +39,8 @@ class Settings(BaseModel):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     
-    # 컴플라이언스 제약
-    MAX_SINGLE_ASSET_WEIGHT: float = 0.25  # 단일 ETF 최대 25% 비중
+    # 1등 우승형 컴플라이언스 제약 (공격형 40% 몰입 허용)
+    MAX_SINGLE_ASSET_WEIGHT: float = 0.40  # 단일 1등 주도 ETF 최대 40% 집중 공격 허용
     MIN_CASH_PARK_RATIO: float = 0.05      # 최소 현금성 완충 5%
     CIRCUIT_BREAKER_MDD: float = -0.03     # -3% 도달 시 서킷브레이커
 
