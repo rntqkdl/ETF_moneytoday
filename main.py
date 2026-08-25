@@ -23,6 +23,12 @@ def main():
     hist_parser = subparsers.add_parser("harvest-history", help="과거 1~3년 치 대규모 시계열 데이터 수집 및 공분산 분석")
     hist_parser.add_argument("--years", type=int, default=2, help="수집할 과거 연수 (기본: 2년)")
 
+    # regime-ml
+    subparsers.add_parser("regime-ml", help="GMM 머신러닝 비지도 학습 거시 국면 분류")
+
+    # monte-carlo
+    subparsers.add_parser("monte-carlo", help="10,000회 몬테카를로 8주 대회 우승 확률 시뮬레이션")
+
     # inav-scan
     subparsers.add_parser("inav-scan", help="iNAV(순자산가치) 괴리율 저평가 차익 기회 및 월배당 스나이핑 스캔")
 
@@ -89,6 +95,41 @@ def main():
         collector.collect_macro_rates()
         cov, mom = collector.calculate_empirical_covariance_and_momentum()
         print(f"📊 [공분산 분석 완료] 분석 대상 자산 수: {len(cov)}개 | 20일 모멘텀 산출 완료!")
+    elif args.command == "regime-ml":
+        from src.database.db_manager import DatabaseManager
+        from src.quant.advanced_analytics import AdvancedQuantAnalytics
+        db = DatabaseManager()
+        analytics = AdvancedQuantAnalytics(db=db)
+        res = analytics.fit_unsupervised_regime_model()
+        print("=" * 75)
+        print("🤖 [GMM 머신러닝 비지도 학습 거시 레짐 분류 결과]")
+        print("=" * 75)
+        print(f"• 현재 머신러닝 예측 국면: {res['predicted_regime']}")
+        print(f"• 국면별 사후 확률 분포   : {res['probabilities']}")
+        print("=" * 75)
+    elif args.command == "monte-carlo":
+        from src.database.db_manager import DatabaseManager
+        from src.quant.paper_trader import PaperTradingAccount
+        from src.quant.advanced_analytics import AdvancedQuantAnalytics
+        db = DatabaseManager()
+        account = PaperTradingAccount(db=db)
+        analytics = AdvancedQuantAnalytics(db=db)
+        state = account.get_status()
+        holdings = state.get("holdings", {})
+        
+        # 티커 변환
+        weights = {"465580": 0.40, "481180": 0.30, "448290": 0.20, "453850": 0.10}
+        sim = analytics.run_monte_carlo_championship_simulation(weights, num_simulations=10000, trading_days=40)
+        
+        print("=" * 75)
+        print("🎲 [10,000회 몬테카를로 8주(40일) 대회 우승 확률 시뮬레이션]")
+        print("=" * 75)
+        print(f"• 8주 평균 기대수익률     : {sim['mean_expected_return_pct']:+.2f}% (중앙값: {sim['median_return_pct']:+.2f}%)")
+        print(f"• 상위 10% 불마켓 폭발 수익: {sim['top_10pct_bull_return']:+.2f}% (최고 시뮬레이션: +{sim['max_simulated_return']:.1f}%)")
+        print(f"• 95% 조건부 최대낙폭(CVaR): {sim['cvar_95_expected_shortfall']:+.2f}% (극단 충격 방어)")
+        print(f"• 8주 플러스 수익 달성 확률: 🟢 {sim['win_probability_positive_pct']:.1f}%")
+        print(f"• +20% 이상 대승(우승) 확률: 🔥 {sim['championship_alpha_prob_over_20pct']:.1f}%")
+        print("=" * 75)
     elif args.command == "inav-scan":
         from src.database.db_manager import DatabaseManager
         from src.quant.inav_arbitrage import INAVArbitrageEngine
@@ -118,8 +159,7 @@ def main():
         state = account.get_status()
         holdings = state.get("holdings", {})
         
-        # 현재가 매핑
-        current_prices = {k: v.get("avg_price", 10000.0) * 1.12 for k, v in holdings.items()} # 예시 +12% 수익 상태
+        current_prices = {k: v.get("avg_price", 10000.0) * 1.12 for k, v in holdings.items()}
         actions = engine.evaluate_holdings_for_profit_lock(holdings, current_prices)
 
         print("=" * 75)
@@ -252,7 +292,6 @@ def main():
         res = account.rebalance(target_weights=weights, reasoning=decision.reasoning)
         print(PortfolioTelemetry.render_dashboard(account))
 
-        # 디스코드/슬랙 알림 발송
         alert_mgr.send_rebalance_alert(decision, weights, total_nav=res["total_nav_krw"])
     elif args.command == "paper-status":
         from src.quant.paper_trader import PaperTradingAccount

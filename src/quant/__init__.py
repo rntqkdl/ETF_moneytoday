@@ -8,6 +8,7 @@ from src.quant.signal_ensemble import DualAlphaEnsembleEngine
 from src.quant.stress_tester import PortfolioStressTester
 from src.quant.inav_arbitrage import INAVArbitrageEngine
 from src.quant.trailing_stop import TrailingProfitLockEngine
+from src.quant.advanced_analytics import AdvancedQuantAnalytics
 
 __all__ = [
     "ComplianceHarness", 
@@ -20,5 +21,6 @@ __all__ = [
     "DualAlphaEnsembleEngine",
     "PortfolioStressTester",
     "INAVArbitrageEngine",
-    "TrailingProfitLockEngine"
+    "TrailingProfitLockEngine",
+    "AdvancedQuantAnalytics"
 ]
