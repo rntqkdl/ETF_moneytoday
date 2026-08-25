@@ -6,6 +6,8 @@ from src.quant.weekly_review import WeeklyPerformanceReviewer
 from src.quant.execution_twap import TWAPExecutionEngine, TWAPExecutionPlan
 from src.quant.signal_ensemble import DualAlphaEnsembleEngine
 from src.quant.stress_tester import PortfolioStressTester
+from src.quant.inav_arbitrage import INAVArbitrageEngine
+from src.quant.trailing_stop import TrailingProfitLockEngine
 
 __all__ = [
     "ComplianceHarness", 
@@ -16,5 +18,7 @@ __all__ = [
     "TWAPExecutionEngine",
     "TWAPExecutionPlan",
     "DualAlphaEnsembleEngine",
-    "PortfolioStressTester"
+    "PortfolioStressTester",
+    "INAVArbitrageEngine",
+    "TrailingProfitLockEngine"
 ]

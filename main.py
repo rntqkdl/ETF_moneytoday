@@ -23,6 +23,12 @@ def main():
     hist_parser = subparsers.add_parser("harvest-history", help="과거 1~3년 치 대규모 시계열 데이터 수집 및 공분산 분석")
     hist_parser.add_argument("--years", type=int, default=2, help="수집할 과거 연수 (기본: 2년)")
 
+    # inav-scan
+    subparsers.add_parser("inav-scan", help="iNAV(순자산가치) 괴리율 저평가 차익 기회 및 월배당 스나이핑 스캔")
+
+    # trailing-check
+    subparsers.add_parser("trailing-check", help="10억 원 포트폴리오 트레일링 익절 및 이익 락인(Profit Lock-in) 검사")
+
     # stress-test
     subparsers.add_parser("stress-test", help="과거 5개년 역사적 위기 국면(팬데믹, 금리폭등) 기반 스트레스 테스트")
 
@@ -83,6 +89,49 @@ def main():
         collector.collect_macro_rates()
         cov, mom = collector.calculate_empirical_covariance_and_momentum()
         print(f"📊 [공분산 분석 완료] 분석 대상 자산 수: {len(cov)}개 | 20일 모멘텀 산출 완료!")
+    elif args.command == "inav-scan":
+        from src.database.db_manager import DatabaseManager
+        from src.quant.inav_arbitrage import INAVArbitrageEngine
+        db = DatabaseManager()
+        engine = INAVArbitrageEngine(db=db)
+        candidates = ["465580", "481180", "448290", "462900", "446770", "441680", "411060", "091160"]
+        ranked = engine.get_etf_arbitrage_ranking(candidates)
+        is_div, div_msg = engine.is_dividend_reinvestment_day()
+
+        print("=" * 75)
+        print("⚡ [iNAV 괴리율 저평가 차익거래 & 월배당 스나이핑 스캔 결과]")
+        print("=" * 75)
+        print(f"• 배당 스나이핑 상태: {div_msg}")
+        print("-" * 75)
+        print("티커     현재가(원)   iNAV(원)   괴리율(%)   저평가 차익 스코어   거래량(주)")
+        print("-" * 75)
+        for r in ranked:
+            print(f"{r['ticker']:6s}  {r['close_price']:9,.0f}  {r['inav']:8,.0f}  {r['disparity_pct']:+7.2f}%   {r['arbitrage_alpha']:+16.2f}    {r['volume']:9,d}")
+        print("=" * 75)
+    elif args.command == "trailing-check":
+        from src.database.db_manager import DatabaseManager
+        from src.quant.paper_trader import PaperTradingAccount
+        from src.quant.trailing_stop import TrailingProfitLockEngine
+        db = DatabaseManager()
+        account = PaperTradingAccount(db=db)
+        engine = TrailingProfitLockEngine(db=db)
+        state = account.get_status()
+        holdings = state.get("holdings", {})
+        
+        # 현재가 매핑
+        current_prices = {k: v.get("avg_price", 10000.0) * 1.12 for k, v in holdings.items()} # 예시 +12% 수익 상태
+        actions = engine.evaluate_holdings_for_profit_lock(holdings, current_prices)
+
+        print("=" * 75)
+        print("🔒 [10억 원 포트폴리오 트레일링 익절 & 이익 락인(Profit Lock-in) 검사]")
+        print("=" * 75)
+        if actions:
+            for a in actions:
+                print(f"• [{a['name']}] 현재 수익률: +{a['gain_pct']:.1f}%")
+                print(f"  👉 조치: {a['action']} ({a['reason']})")
+        else:
+            print("• 현재 전 종목 안정 보유 중 (트레일링 익절 발동 조건 미도달)")
+        print("=" * 75)
     elif args.command == "stress-test":
         from src.database.db_manager import DatabaseManager
         from src.quant.paper_trader import PaperTradingAccount
@@ -98,11 +147,11 @@ def main():
             weights[k] = v.get("target_weight", 0.20)
         if not weights:
             weights = {
-                "KODEX 미국AI반도체TOP3플러스": 0.25,
-                "TIGER 미국AI전력SMR": 0.25,
-                "ACE 미국빅테크TOP7 Plus": 0.25,
-                "TIGER CD금리투자KIS(합성)": 0.125,
-                "ACE 미국달러SOFR금리(합성)": 0.125
+                "KODEX 미국AI반도체TOP3플러스": 0.40,
+                "TIGER 미국AI전력SMR": 0.30,
+                "ACE 미국빅테크TOP7 Plus": 0.20,
+                "TIGER CD금리투자KIS(합성)": 0.05,
+                "ACE 미국달러SOFR금리(합성)": 0.05
             }
         
         res = tester.run_stress_test(current_weights=weights, total_nav=state.get("total_nav_krw", 1_000_000_000.0))
@@ -237,11 +286,11 @@ def main():
             reasoning="AI 반도체 및 원자력 SMR 전력망 수주 모멘텀 지속"
         )
         mock_weights = {
-            "TIGER 미국AI반도체팹리스": 0.25,
-            "KODEX 원자력SMR": 0.25,
-            "ACE 미국빅테크TOP7 Plus": 0.25,
-            "TIGER CD금리투자KIS(합성)": 0.125,
-            "ACE 미국달러SOFR금리(합성)": 0.125
+            "TIGER 미국AI반도체팹리스": 0.40,
+            "KODEX 원자력SMR": 0.30,
+            "ACE 미국빅테크TOP7 Plus": 0.20,
+            "TIGER CD금리투자KIS(합성)": 0.05,
+            "ACE 미국달러SOFR금리(합성)": 0.05
         }
         success = mgr.send_rebalance_alert(mock_decision, mock_weights)
         if not success:
