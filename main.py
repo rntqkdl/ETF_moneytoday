@@ -56,6 +56,14 @@ def main():
     twap_parser = subparsers.add_parser("twap-plan", help="10억 원 슬리피지 방어 TWAP 6회 분할 주문표 생성")
     twap_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
 
+    # vwap-plan
+    vwap_parser = subparsers.add_parser("vwap-plan", help="10억 원 KRX U자형 거래량 가중(VWAP) 스마트 배치 분할표 생성")
+    vwap_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
+
+    # almgren-plan
+    ac_parser = subparsers.add_parser("almgren-plan", help="10억 원 월가 최적 실행 궤적(Almgren-Chriss) 수학적 배치 분할표 생성")
+    ac_parser.add_argument("--news", type=str, required=True, help="뉴스 헤드라인/시황 텍스트")
+
     # paper-status
     subparsers.add_parser("paper-status", help="가상 10억 원 포트폴리오 실시간 성과 대시보드 출력")
 
@@ -117,7 +125,6 @@ def main():
         state = account.get_status()
         holdings = state.get("holdings", {})
         
-        # 티커 변환
         weights = {"465580": 0.40, "481180": 0.30, "448290": 0.20, "453850": 0.10}
         sim = analytics.run_monte_carlo_championship_simulation(weights, num_simulations=10000, trading_days=40)
         
@@ -172,6 +179,66 @@ def main():
         else:
             print("• 현재 전 종목 안정 보유 중 (트레일링 익절 발동 조건 미도달)")
         print("=" * 75)
+    elif args.command == "vwap-plan":
+        from src.ai.inference_engine import QuantInferenceEngine
+        from src.quant.harness import ComplianceHarness
+        from src.quant.optimizer import PortfolioOptimizer
+        from src.quant.paper_trader import PaperTradingAccount
+        from src.quant.execution_algos import SmartBatchExecutionEngine
+        from src.database.db_manager import DatabaseManager
+
+        db = DatabaseManager()
+        engine = QuantInferenceEngine()
+        harness = ComplianceHarness(db=db)
+        optimizer = PortfolioOptimizer(harness=harness)
+        account = PaperTradingAccount(db=db)
+
+        decision = engine.evaluate_news(args.news)
+        weights = optimizer.calculate_weights(decision)
+        state = account.get_status()
+        
+        plan = SmartBatchExecutionEngine.generate_vwap_plan(
+            target_weights=weights,
+            total_nav=state.get("total_nav_krw", 1_000_000_000.0)
+        )
+
+        print("\n" + "=" * 80)
+        print(f"📊 [VWAP 거래량 가중 최적 배치 분할표] (총 주문액: {plan.total_order_amount_krw:,.0f} 원)")
+        print(f"• 분할 구간: {plan.num_slices}개 시간대 (KRX U자형 커브) | 예상 시장 충격 절감: +{plan.expected_market_impact_saving_krw:,.0f} 원")
+        print("-" * 80)
+        for s in plan.slices[:12]:
+            print(f"  [{s.scheduled_time}] #{s.slice_index}차 {s.action} | {s.ticker_name:28s} | {s.shares:6,d}주 ({s.weight_pct:4.1f}%) | {s.slice_amount_krw:,.0f}원")
+        print("=" * 80)
+    elif args.command == "almgren-plan":
+        from src.ai.inference_engine import QuantInferenceEngine
+        from src.quant.harness import ComplianceHarness
+        from src.quant.optimizer import PortfolioOptimizer
+        from src.quant.paper_trader import PaperTradingAccount
+        from src.quant.execution_algos import SmartBatchExecutionEngine
+        from src.database.db_manager import DatabaseManager
+
+        db = DatabaseManager()
+        engine = QuantInferenceEngine()
+        harness = ComplianceHarness(db=db)
+        optimizer = PortfolioOptimizer(harness=harness)
+        account = PaperTradingAccount(db=db)
+
+        decision = engine.evaluate_news(args.news)
+        weights = optimizer.calculate_weights(decision)
+        state = account.get_status()
+        
+        plan = SmartBatchExecutionEngine.generate_almgren_chriss_plan(
+            target_weights=weights,
+            total_nav=state.get("total_nav_krw", 1_000_000_000.0)
+        )
+
+        print("\n" + "=" * 80)
+        print(f"📐 [Almgren-Chriss 월가 최적 궤적 배치 분할표] (총 주문액: {plan.total_order_amount_krw:,.0f} 원)")
+        print(f"• 분할 구간: {plan.num_slices}개 시간대 (지수 감쇄 최적화) | 예상 슬리피지 절감: +{plan.expected_market_impact_saving_krw:,.0f} 원")
+        print("-" * 80)
+        for s in plan.slices[:12]:
+            print(f"  [{s.scheduled_time}] #{s.slice_index}차 {s.action} | {s.ticker_name:28s} | {s.shares:6,d}주 ({s.weight_pct:4.1f}%) | {s.slice_amount_krw:,.0f}원")
+        print("=" * 80)
     elif args.command == "stress-test":
         from src.database.db_manager import DatabaseManager
         from src.quant.paper_trader import PaperTradingAccount
