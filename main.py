@@ -33,6 +33,9 @@ def main():
     # paper-status
     subparsers.add_parser("paper-status", help="가상 10억 원 포트폴리오 실시간 성과 대시보드 출력")
 
+    # scheduler
+    subparsers.add_parser("scheduler", help="KRX 장 운영 시간(08:30 / 15:40) 자동화 스케줄러 데몬 가동")
+
     # serve
     subparsers.add_parser("serve", help="n8n 연동용 FastAPI 브릿지 서버 구동 (Port 8000)")
 
@@ -101,6 +104,9 @@ def main():
         from src.quant.telemetry import PortfolioTelemetry
         account = PaperTradingAccount()
         print(PortfolioTelemetry.render_dashboard(account))
+    elif args.command == "scheduler":
+        from src.api.scheduler_daemon import start_daemon_loop
+        start_daemon_loop()
     elif args.command == "serve":
         from src.api.server import start_server
         start_server()
