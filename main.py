@@ -19,6 +19,10 @@ def main():
     # harvest
     subparsers.add_parser("harvest", help="대표 ETF 시세 및 매크로 지표 데이터 수집")
 
+    # harvest-history
+    hist_parser = subparsers.add_parser("harvest-history", help="과거 1~3년 치 대규모 시계열 데이터 수집 및 공분산 분석")
+    hist_parser.add_argument("--years", type=int, default=2, help="수집할 과거 연수 (기본: 2년)")
+
     # dart-harvest
     subparsers.add_parser("dart-harvest", help="DART 전자공시 실시간 기업 공시 수집 및 RAG 동기화")
 
@@ -64,8 +68,15 @@ def main():
     elif args.command == "harvest":
         from src.database.data_collector import FinancialDataCollector
         collector = FinancialDataCollector()
-        collector.collect_etf_history(days=60)
+        collector.collect_multi_year_history(years=1)
         collector.collect_macro_rates()
+    elif args.command == "harvest-history":
+        from src.database.data_collector import FinancialDataCollector
+        collector = FinancialDataCollector()
+        collector.collect_multi_year_history(years=args.years)
+        collector.collect_macro_rates()
+        cov, mom = collector.calculate_empirical_covariance_and_momentum()
+        print(f"📊 [공분산 분석 완료] 분석 대상 자산 수: {len(cov)}개 | 20일 모멘텀 산출 완료!")
     elif args.command == "dart-harvest":
         from src.database.dart_collector import DARTDisclosureCollector
         collector = DARTDisclosureCollector()
