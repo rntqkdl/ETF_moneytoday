@@ -1,11 +1,13 @@
 """
 src/api/routes.py
-FastAPI 엔드포인트 라우터 정의
+FastAPI 엔드포인트 라우터 정의 (웹 대시보드 및 실시간 데이터 API 지원)
 """
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
+from pathlib import Path
 import time
 import json
 
@@ -14,6 +16,7 @@ from src.rag.hybrid_search import HybridETFRAGEngine
 from src.ai.inference_engine import QuantInferenceEngine
 from src.quant.harness import ComplianceHarness
 from src.quant.optimizer import PortfolioOptimizer
+from src.quant.paper_trader import PaperTradingAccount
 
 router = APIRouter()
 
@@ -21,6 +24,7 @@ db = DatabaseManager()
 rag = HybridETFRAGEngine(db=db)
 harness = ComplianceHarness(db=db)
 optimizer = PortfolioOptimizer(harness=harness)
+account = PaperTradingAccount(db=db)
 ai_engine = None
 
 def get_ai_engine():
@@ -40,6 +44,21 @@ async def health_check():
         "indexed_etfs": len(rag.docs),
         "engine": "Apple Silicon M5 Metal GPU"
     }
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def serve_dashboard():
+    """반응형 실시간 웹 대시보드 UI 서빙"""
+    template_path = Path(__file__).parent / "templates" / "dashboard.html"
+    if template_path.exists():
+        with open(template_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse(content="<h1>대시보드 템플릿을 찾을 수 없습니다.</h1>", status_code=404)
+
+@router.get("/api/dashboard/data")
+async def get_dashboard_data():
+    """대시보드 실시간 렌더링용 JSON 데이터 반환"""
+    state = account.get_status()
+    return state
 
 @router.post("/api/macro/evaluate")
 async def evaluate_macro(req: NewsRequest):
