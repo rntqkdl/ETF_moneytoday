@@ -1,7 +1,6 @@
 """
 src/quant/paper_trader.py
-10억 원 가상 포트폴리오 모의투자 샌드박스 및 일일 원장(Ledger) 추적기
-대회 시작(9/21) 전 4주 동안 실전 데이터로 모의 포트폴리오를 사전 운용하여 성과 추적
+10억 원 가상 모의투자 계좌 상태 머신 및 실시간 시세 연동 매매 원장 (SQL 영구 보관)
 """
 
 import json
@@ -10,128 +9,105 @@ from typing import Dict, Any, List, Optional
 from src.database.db_manager import DatabaseManager
 
 class PaperTradingAccount:
-    """10억 원 가상 포트폴리오 계좌 관리자"""
-
-    INITIAL_CAPITAL = 1_000_000_000.0  # 10억 원
+    """10억 원 가상 자본 모의투자 포트폴리오 관리자"""
 
     def __init__(self, db: Optional[DatabaseManager] = None):
         self.db = db or DatabaseManager()
-        self._init_tables()
+        self._ensure_init()
 
-    def _init_tables(self):
-        """가상 포트폴리오 상태 및 매매 내역 테이블 생성"""
-        self.db.execute_query("""
-        CREATE TABLE IF NOT EXISTS paper_portfolio_state (
-            id INTEGER PRIMARY KEY DEFAULT 1,
-            cash_krw REAL NOT NULL,
-            holdings_json TEXT NOT NULL,       -- {"KODEX 미국AI반도체": {"shares": 10000, "avg_price": 12500}, ...}
-            total_nav_krw REAL NOT NULL,
-            peak_nav_krw REAL NOT NULL,
-            cumulative_return_pct REAL NOT NULL,
-            max_drawdown_pct REAL NOT NULL,
-            last_rebalanced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-
-        self.db.execute_query("""
-        CREATE TABLE IF NOT EXISTS paper_trades_ledger (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            trade_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            ticker_name TEXT NOT NULL,
-            action TEXT NOT NULL,             -- 'BUY', 'SELL'
-            shares INTEGER NOT NULL,
-            price REAL NOT NULL,
-            amount_krw REAL NOT NULL,
-            reasoning TEXT
-        );
-        """)
-
-        # 초기 계좌 데이터 없으면 10억 원 세팅
-        rows = self.db.execute_query("SELECT * FROM paper_portfolio_state WHERE id = 1")
-        if not rows:
+    def _ensure_init(self):
+        row = self.db.execute_query("SELECT * FROM paper_portfolio_state WHERE id = 1")
+        if not row:
+            # 10억 원 초기 포트폴리오 (40/30/20/10 클러스터 직교성 배분)
+            initial_holdings = {
+                "KODEX 미국AI반도체TOP3플러스": {"shares": 16722, "avg_price": 23920.0, "target_weight": 0.40, "valuation_krw": 400000000.0},
+                "TIGER 미국AI전력SMR": {"shares": 18987, "avg_price": 15800.0, "target_weight": 0.30, "valuation_krw": 300000000.0},
+                "ACE 미국빅테크TOP7 Plus": {"shares": 11267, "avg_price": 17750.0, "target_weight": 0.20, "valuation_krw": 200000000.0},
+                "TIGER CD금리투자KIS(합성)": {"shares": 13927, "avg_price": 7180.0, "target_weight": 0.10, "valuation_krw": 100000000.0}
+            }
             self.db.execute_query("""
             INSERT INTO paper_portfolio_state (
-                id, cash_krw, holdings_json, total_nav_krw, peak_nav_krw, cumulative_return_pct, max_drawdown_pct
-            ) VALUES (1, ?, '{}', ?, ?, 0.0, 0.0)
-            """, (self.INITIAL_CAPITAL, self.INITIAL_CAPITAL, self.INITIAL_CAPITAL))
+                id, cash_krw, holdings_json, total_nav_krw, peak_nav_krw, cumulative_return_pct, max_drawdown_pct, last_rebalanced_at
+            ) VALUES (1, 0.0, ?, 1000000000.0, 1000000000.0, 0.0, 0.0, ?)
+            """, (json.dumps(initial_holdings, ensure_ascii=False), datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
 
     def get_status(self) -> Dict[str, Any]:
         """현재 계좌 상태 조회"""
-        rows = self.db.execute_query("SELECT * FROM paper_portfolio_state WHERE id = 1")
-        if not rows:
+        row = self.db.execute_query("SELECT * FROM paper_portfolio_state WHERE id = 1")
+        if not row:
             return {}
-        state = dict(rows[0])
+        state = dict(row[0])
         state["holdings"] = json.loads(state["holdings_json"])
         return state
 
-    def rebalance(self, target_weights: Dict[str, float], estimated_prices: Optional[Dict[str, float]] = None, reasoning: str = "") -> Dict[str, Any]:
+    def rebalance(self, target_weights: Dict[str, float], reasoning: str = "") -> Dict[str, Any]:
         """
-        AI 목표 비중에 따른 가상 10억 원 포트폴리오 리밸런싱 실행
+        신규 목표 비중에 맞추어 10억 원 포트폴리오 리밸런싱 집행 및 원장 기록
         """
-        current_state = self.get_status()
-        current_cash = current_state["cash_krw"]
-        holdings = current_state["holdings"]
-        
-        # 기본 가격 추정치 (실제 시세 미제공 시 기본 10,000원)
-        prices = estimated_prices or {}
-        
-        # 1. 현재 총 포트폴리오 평가액 (NAV) 계산
-        current_nav = current_cash
-        for name, info in holdings.items():
-            price = prices.get(name, info.get("avg_price", 10000.0))
-            current_nav += info["shares"] * price
+        state = self.get_status()
+        current_nav = state.get("total_nav_krw", 1_000_000_000.0)
+        old_holdings = state.get("holdings", {})
 
-        # 2. 목표 비중별 목표 금액 및 수량 계산
         new_holdings = {}
+        total_eval = 0.0
         trade_logs = []
-        new_cash = current_nav
+
+        # 최신 종가 조회 맵
+        price_rows = self.db.execute_query("SELECT ticker, name, close_price FROM etf_daily_prices WHERE trade_date = (SELECT MAX(trade_date) FROM etf_daily_prices)")
+        price_map = {r["name"]: float(r["close_price"]) for r in price_rows if r["name"]}
 
         for name, weight in target_weights.items():
+            price = price_map.get(name, 15000.0)
             target_amount = current_nav * weight
-            price = prices.get(name, 10000.0)
-            target_shares = int(target_amount / max(price, 1.0))
-            actual_amount = target_shares * price
+            shares = int(target_amount / price) if price > 0 else 0
+            val_krw = shares * price
+            total_eval += val_krw
 
-            if target_shares > 0:
-                new_holdings[name] = {
-                    "shares": target_shares,
-                    "avg_price": price,
-                    "target_weight": weight,
-                    "valuation_krw": actual_amount
-                }
-                new_cash -= actual_amount
-                trade_logs.append((name, "BUY", target_shares, price, actual_amount, reasoning))
+            new_holdings[name] = {
+                "shares": shares,
+                "avg_price": price,
+                "target_weight": weight,
+                "valuation_krw": val_krw
+            }
 
-        # 3. 성과 지표 계산
-        peak_nav = max(current_state["peak_nav_krw"], current_nav)
-        cum_return = ((current_nav - self.INITIAL_CAPITAL) / self.INITIAL_CAPITAL) * 100.0
-        mdd = ((current_nav - peak_nav) / peak_nav) * 100.0
+            old_shares = old_holdings.get(name, {}).get("shares", 0)
+            diff_shares = shares - old_shares
+            if diff_shares != 0:
+                action = "BUY" if diff_shares > 0 else "SELL"
+                trade_logs.append((
+                    name, action, abs(diff_shares), price, abs(diff_shares * price), 0.0,
+                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                ))
 
-        # 4. DB 상태 업데이트
+        # 거래 원장 기록
+        for t in trade_logs:
+            self.db.execute_query("""
+            INSERT INTO paper_trades_ledger (
+                ticker_name, action, shares, execution_price, total_amount_krw, slippage_loss_krw, executed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, t)
+
+        # 상태 업데이트
+        cum_ret = ((total_eval - 1_000_000_000.0) / 1_000_000_000.0) * 100.0
+        peak_nav = max(state.get("peak_nav_krw", 1_000_000_000.0), total_eval)
+        mdd = ((total_eval - peak_nav) / peak_nav) * 100.0 if peak_nav > 0 else 0.0
+
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.db.execute_query("""
         UPDATE paper_portfolio_state SET
-            cash_krw = ?,
             holdings_json = ?,
             total_nav_krw = ?,
             peak_nav_krw = ?,
             cumulative_return_pct = ?,
             max_drawdown_pct = ?,
-            last_rebalanced_at = CURRENT_TIMESTAMP
+            last_rebalanced_at = ?
         WHERE id = 1
-        """, (new_cash, json.dumps(new_holdings, ensure_ascii=False), current_nav, peak_nav, cum_return, mdd))
-
-        # 5. 거래 원장 기록
-        for log in trade_logs:
-            self.db.execute_query("""
-            INSERT INTO paper_trades_ledger (ticker_name, action, shares, price, amount_krw, reasoning)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """, log)
+        """, (json.dumps(new_holdings, ensure_ascii=False), total_eval, peak_nav, cum_ret, mdd, now_str))
 
         return {
-            "total_nav_krw": current_nav,
-            "cash_krw": new_cash,
-            "cumulative_return_pct": cum_return,
+            "total_nav_krw": total_eval,
+            "cumulative_return_pct": cum_ret,
             "max_drawdown_pct": mdd,
-            "holdings_count": len(new_holdings),
+            "trades_count": len(trade_logs),
             "holdings": new_holdings
         }
