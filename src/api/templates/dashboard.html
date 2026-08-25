@@ -3,243 +3,328 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>머니투데이 ETF 투자왕 [연금형] AI 퀀트 대시보드</title>
+    <title>머니투데이 ETF 투자왕 [연금형] AI 퀀트 시스템</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Inter Font CDN (Pin Sans Substitute) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'pin-red': '#e60023',
+                        'pin-red-pressed': '#cc001f',
+                        'pin-canvas': '#ffffff',
+                        'pin-surface-soft': '#fbfbf9',
+                        'pin-surface-card': '#f6f6f3',
+                        'pin-secondary-bg': '#e5e5e0',
+                        'pin-secondary-pressed': '#c8c8c1',
+                        'pin-surface-dark': '#262622',
+                        'pin-hairline': '#dadad3',
+                        'pin-hairline-soft': '#e5e5e0',
+                        'pin-ink': '#111111',
+                        'pin-ink-soft': '#211922',
+                        'pin-body': '#33332e',
+                        'pin-mute': '#62625b',
+                        'pin-ash': '#91918c',
+                    },
+                    borderRadius: {
+                        'md': '16px',
+                        'lg': '32px',
+                        'full': '9999px'
+                    },
+                    letterSpacing: {
+                        'tight-display': '-1.2px',
+                        'tight-heading': '-0.8px',
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-        body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; }
+        body { font-family: 'Inter', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+        .display-hero { letter-spacing: -1.2px; line-height: 1.1; }
+        .heading-tight { letter-spacing: -0.8px; }
         
-        @keyframes pulseGlow {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(1.15); }
+        /* 핀터레스트 특유의 부드러운 핀 펄스 효과 */
+        @keyframes pinPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.08); opacity: 0.8; }
         }
-        .live-pulse { animation: pulseGlow 2s infinite ease-in-out; }
-
-        @keyframes marquee {
-            0% { transform: translateY(0%); }
-            100% { transform: translateY(-50%); }
-        }
-        .ticker-stream { animation: marquee 12s linear infinite; }
-        .ticker-stream:hover { animation-play-state: paused; }
+        .pin-live-indicator { animation: pinPulse 2s infinite ease-in-out; }
     </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen pb-16 antialiased selection:bg-blue-500 selection:text-white">
-    <!-- 모바일/PC 통합 헤더 -->
-    <header class="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-50 px-4 py-3 sm:px-6 shadow-sm">
-        <div class="max-w-4xl mx-auto flex items-center justify-between">
-            <div class="flex items-center space-x-2.5">
-                <span class="text-2xl">🏆</span>
-                <div>
-                    <h1 class="text-base font-black bg-gradient-to-r from-blue-400 via-indigo-300 to-teal-300 bg-clip-text text-transparent">
-                        머니투데이 ETF 투자왕
-                    </h1>
-                    <p class="text-[11px] text-slate-400 flex items-center">
-                        <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block mr-1.5 live-pulse"></span>
-                        KRX & 금감원 DART 실시간 동기화
-                    </p>
-                </div>
-            </div>
-            <div class="text-right">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1 animate-ping"></span>
-                    LIVE 차트 구동 중
+<body class="bg-pin-surface-soft text-pin-body min-h-screen selection:bg-pin-red selection:text-white antialiased">
+
+    <!-- 1. Pinterest Style Sticky Top Navigation -->
+    <header class="bg-pin-canvas border-b border-pin-hairline sticky top-0 z-50 h-16 px-4 sm:px-8 flex items-center justify-between">
+        <!-- Brand Wordmark / Icon -->
+        <div class="flex items-center space-x-3">
+            <a href="/dashboard" class="flex items-center space-x-2">
+                <span class="w-9 h-9 rounded-full bg-pin-red flex items-center justify-center text-white font-black text-lg shadow-sm">
+                    P
                 </span>
-                <p class="text-[9px] text-slate-500 mt-0.5 font-mono" id="dataTime">실시간</p>
+                <span class="text-lg font-black text-pin-ink tracking-tight hidden sm:inline">
+                    ETF 투자왕
+                </span>
+            </a>
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-pin-surface-card text-pin-mute border border-pin-hairline">
+                연금형 10억 리그
+            </span>
+        </div>
+
+        <!-- Center Search / Live State Pill -->
+        <div class="flex-1 max-w-md mx-4 hidden md:block">
+            <div class="bg-pin-surface-card rounded-full px-4 py-2 flex items-center space-x-2 border border-transparent focus-within:border-pin-ash focus-within:bg-pin-canvas transition">
+                <svg class="w-4 h-4 text-pin-mute" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <span class="text-xs text-pin-ink font-medium" id="searchBarText">893개 연금 적격 ETF & KRX 실시간 동기화 중...</span>
             </div>
+        </div>
+
+        <!-- Right Single-Accent Red CTA -->
+        <div class="flex items-center space-x-2.5">
+            <span class="text-xs text-pin-mute font-medium hidden sm:inline font-mono" id="navClock">실시간</span>
+            <button class="bg-pin-red hover:bg-pin-red-pressed text-white text-xs font-bold px-4 py-2 rounded-full h-10 transition shadow-sm flex items-center space-x-1.5 active:scale-95">
+                <span class="w-2 h-2 rounded-full bg-white pin-live-indicator"></span>
+                <span>1위 퀀트 가동 중</span>
+            </button>
         </div>
     </header>
 
-    <!-- 메인 컨테이너 -->
-    <main class="max-w-4xl mx-auto px-4 py-5 space-y-5">
-        <!-- 1. 총 평가 자산 & 핵심 지표 히어로 카드 -->
-        <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/50 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
-            <div class="absolute -right-10 -top-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-            
-            <div class="flex items-center justify-between text-xs text-slate-400 font-medium mb-1">
-                <span>총 평가 자산 (10억 원 가상 리그)</span>
-                <span class="text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20 font-mono transition-all" id="cumReturnBadge">
-                    +0.07%
-                </span>
-            </div>
-            
-            <div class="text-3xl sm:text-4xl font-black tracking-tight text-white mt-1 font-mono flex items-baseline space-x-2" id="totalNav">
-                1,000,722,440 원
+    <!-- 메인 컨테이너 (Pinterest Warm-Cream Canvas) -->
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+        <!-- 2. Pinterest Hero Card: 70px Display Headline & 10억 NAV -->
+        <section class="bg-pin-canvas rounded-[32px] p-6 sm:p-10 border border-pin-hairline/60 shadow-sm relative overflow-hidden">
+            <div class="max-w-2xl space-y-3">
+                <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-pin-surface-card border border-pin-hairline text-xs font-semibold text-pin-mute">
+                    <span class="w-2 h-2 rounded-full bg-pin-red"></span>
+                    <span>Apple Silicon M5 Dual-Core Quant Engine</span>
+                </div>
+                <h1 class="text-3xl sm:text-5xl lg:text-6xl font-bold text-pin-ink display-hero">
+                    10억 원 연금 포트폴리오
+                </h1>
+                <p class="text-base sm:text-lg text-pin-mute font-normal leading-relaxed">
+                    선물·레버리지 0-Violation 준수 • 8대 핵심 섹터 1등 국가대표 ETF 40/30/20/10 비대칭 공격형 운용
+                </p>
             </div>
 
-            <!-- 서브 지표 3단 그리드 -->
-            <div class="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-slate-800/80 text-center">
-                <div class="p-2.5 rounded-2xl bg-slate-950/60 border border-slate-800/40">
-                    <p class="text-[10px] text-slate-400">최대 낙폭 (MDD)</p>
-                    <p class="text-xs sm:text-sm font-bold text-slate-200 mt-0.5 font-mono" id="mddVal">0.00%</p>
+            <!-- 핵심 자산 평가액 4대 지표 그리드 -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-8 pt-8 border-t border-pin-hairline">
+                <div class="bg-pin-surface-card rounded-2xl p-4 sm:p-5">
+                    <p class="text-xs font-bold text-pin-mute uppercase tracking-wider">총 평가 자산 (NAV)</p>
+                    <p class="text-xl sm:text-2xl font-black text-pin-ink mt-1 font-mono tracking-tight" id="totalNav">1,000,722,440 원</p>
+                    <p class="text-[11px] text-emerald-600 font-bold mt-0.5" id="cumReturnBadge">+0.07% 수익 중</p>
                 </div>
-                <div class="p-2.5 rounded-2xl bg-slate-950/60 border border-slate-800/40">
-                    <p class="text-[10px] text-slate-400">거시 국면</p>
-                    <p class="text-xs sm:text-sm font-bold text-amber-300 mt-0.5 truncate" id="regimeVal">AI Supercycle</p>
+                <div class="bg-pin-surface-card rounded-2xl p-4 sm:p-5">
+                    <p class="text-xs font-bold text-pin-mute uppercase tracking-wider">최대 낙폭 (MDD)</p>
+                    <p class="text-xl sm:text-2xl font-black text-pin-ink mt-1 font-mono tracking-tight" id="mddVal">0.00%</p>
+                    <p class="text-[11px] text-pin-mute mt-0.5">안전 한도 -3.0%</p>
                 </div>
-                <div class="p-2.5 rounded-2xl bg-slate-950/60 border border-slate-800/40">
-                    <p class="text-[10px] text-slate-400">원/달러 환율</p>
-                    <p class="text-xs sm:text-sm font-bold text-blue-300 mt-0.5 font-mono" id="fxVal">1,386.53원</p>
+                <div class="bg-pin-surface-card rounded-2xl p-4 sm:p-5">
+                    <p class="text-xs font-bold text-pin-mute uppercase tracking-wider">AI 감지 거시 국면</p>
+                    <p class="text-base sm:text-lg font-bold text-pin-ink mt-1 truncate" id="regimeVal">AI Supercycle</p>
+                    <p class="text-[11px] text-pin-red font-bold mt-0.5">확신도 94.0% 🔥</p>
+                </div>
+                <div class="bg-pin-surface-card rounded-2xl p-4 sm:p-5">
+                    <p class="text-xs font-bold text-pin-mute uppercase tracking-wider">원/달러 환율 (FX)</p>
+                    <p class="text-xl sm:text-2xl font-black text-pin-ink mt-1 font-mono tracking-tight" id="fxVal">1,386.53 원</p>
+                    <p class="text-[11px] text-pin-mute mt-0.5">VIX 15.85 (안정)</p>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <!-- 2. 실시간 DART 공시 이벤트 & 10억 자산 성장 연동 꺾은선 차트 -->
-        <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-lg space-y-3">
+        <!-- 3. 실시간 인터랙티브 차트 그리드 (자산 성장 곡선 + 포트폴리오 비중) -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- 실시간 NAV 자산 성장 곡선 (2열 차지) -->
+            <div class="lg:col-span-2 bg-pin-canvas rounded-[32px] p-6 sm:p-8 border border-pin-hairline/60 shadow-sm space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-xl font-bold text-pin-ink heading-tight">실시간 자산 성장 곡선</h2>
+                        <p class="text-xs text-pin-mute">KRX 실시간 체결가 및 DART 공시 이벤트 동기화</p>
+                    </div>
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-pin-surface-card text-pin-ink border border-pin-hairline">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
+                        5초 자동 갱신
+                    </span>
+                </div>
+                <div class="relative h-64 sm:h-72">
+                    <canvas id="navChart"></canvas>
+                </div>
+                <div class="flex items-center justify-between text-xs text-pin-mute pt-2 border-t border-pin-hairline/60">
+                    <span class="flex items-center">
+                        <span class="w-2.5 h-2.5 rounded-full bg-pin-red inline-block mr-1.5"></span>
+                        금감원 DART 대형 공시 감지 시점
+                    </span>
+                    <span class="font-mono text-pin-ink font-semibold" id="lastTickTime">체결 대기 중</span>
+                </div>
+            </div>
+
+            <!-- 8대 클러스터 포트폴리오 비중 (1열 차지) -->
+            <div class="bg-pin-canvas rounded-[32px] p-6 sm:p-8 border border-pin-hairline/60 shadow-sm flex flex-col justify-between space-y-4">
+                <div>
+                    <h2 class="text-xl font-bold text-pin-ink heading-tight">포트폴리오 비중 배분</h2>
+                    <p class="text-xs text-pin-mute">1등 우승형 직교성 40/30/20/10 틸팅</p>
+                </div>
+                <div class="relative h-56 flex items-center justify-center">
+                    <canvas id="allocationChart"></canvas>
+                </div>
+                <div class="bg-pin-surface-card rounded-2xl p-3 text-center text-xs text-pin-mute">
+                    단일 종목 최대 40% 캡 • 현금 완충 10% 자동 보존
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. Pinterest Style Content Masonry: 보유 ETF 핀 카드 그리드 -->
+        <section class="space-y-4">
             <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-2">
-                    <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
-                        <span class="mr-1.5">📈</span> 실시간 자산 성장 & DART 공시 반응 곡선
-                    </h2>
+                <div>
+                    <h2 class="text-2xl font-bold text-pin-ink heading-tight">보유 포지션 핀 보드</h2>
+                    <p class="text-xs text-pin-mute">각 섹터별 1등 국가대표 ETF 실시간 평가</p>
                 </div>
-                <span class="text-[10px] text-emerald-400 font-semibold flex items-center">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1 animate-pulse"></span>
-                    5초 실시간 갱신
+                <span class="text-xs font-bold text-pin-ink bg-pin-surface-card px-3 py-1.5 rounded-full border border-pin-hairline" id="holdingCount">
+                    4개 종목 보유
                 </span>
             </div>
-            
-            <div class="relative h-56 sm:h-64">
-                <canvas id="navChart"></canvas>
-            </div>
-            
-            <div class="flex items-center justify-between text-[10px] text-slate-400 pt-2 border-t border-slate-800/60">
-                <span class="flex items-center">
-                    <span class="w-2 h-2 rounded-full bg-amber-400 inline-block mr-1"></span>
-                    ⚡ DART 금감원 공시 감지 시점
-                </span>
-                <span class="text-slate-500 font-mono" id="lastTickTime">체결 대기 중</span>
-            </div>
-        </div>
 
-        <!-- 3. 8대 클러스터 포트폴리오 비중 도넛 차트 -->
-        <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-sm">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
-                    <span class="mr-1.5">📊</span> 1등 우승형 포트폴리오 비중 배분 (40/30/20/10)
-                </h2>
-                <span class="text-[10px] text-blue-400 font-semibold">직교성 분산 적용</span>
-            </div>
-            <div class="relative h-52 sm:h-60 flex items-center justify-center">
-                <canvas id="allocationChart"></canvas>
-            </div>
-        </div>
-
-        <!-- 4. 실시간 보유 종목 카드 리스트 -->
-        <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-sm space-y-3">
-            <div class="flex items-center justify-between mb-1">
-                <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
-                    <span class="mr-1.5">💼</span> 보유 포지션 및 실제 KRX 현재가
-                </h2>
-                <span class="text-[10px] text-slate-400 font-semibold font-mono" id="holdingCount">4개 종목</span>
-            </div>
-            
-            <div class="space-y-2.5" id="positionCards">
+            <!-- Pinterest 2x2 Masonry Grid (Warm-Cream Pin Cards with Overlay Pills) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="positionCards">
                 <!-- JS 렌더링 -->
             </div>
-        </div>
+        </section>
 
-        <!-- 5. 금감원 DART 실시간 공시 피드 스트림 (애니메이션 탑재) -->
-        <div class="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 shadow-sm space-y-3">
+        <!-- 5. 금감원 DART 실시간 전자공시 스트림 (Pinterest Feature Row) -->
+        <section class="bg-pin-canvas rounded-[32px] p-6 sm:p-8 border border-pin-hairline/60 shadow-sm space-y-4">
             <div class="flex items-center justify-between">
-                <h2 class="text-xs sm:text-sm font-bold text-slate-200 flex items-center">
-                    <span class="mr-1.5">⚡</span> 실시간 금감원(DART) 전자공시 감시 스트림
-                </h2>
-                <span class="text-[10px] text-amber-400 font-bold flex items-center">
-                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 mr-1 live-pulse"></span>
-                    공시 감시 중
+                <div class="flex items-center space-x-2.5">
+                    <span class="w-8 h-8 rounded-full bg-pin-surface-card flex items-center justify-center text-pin-ink font-bold text-sm">
+                        ⚡
+                    </span>
+                    <div>
+                        <h2 class="text-lg font-bold text-pin-ink heading-tight">금감원 DART 실시간 전자공시 스트림</h2>
+                        <p class="text-xs text-pin-mute">삼성전자, SK하이닉스, 한화에어로스페이스 등 대형주 공시 실시간 RAG 주입</p>
+                    </div>
+                </div>
+                <span class="text-xs font-bold text-pin-red bg-pin-red/10 px-3 py-1 rounded-full border border-pin-red/20">
+                    Open API 직통
                 </span>
             </div>
-            
-            <div class="space-y-2" id="disclosureContainer">
+
+            <div class="space-y-2.5" id="disclosureContainer">
                 <!-- JS 렌더링 -->
             </div>
-        </div>
+        </section>
+
     </main>
 
-    <!-- 하단 라이브 상태 바 -->
-    <div class="fixed bottom-0 inset-x-0 bg-slate-900/95 border-t border-slate-800/80 backdrop-blur py-2.5 px-4 text-center z-40">
-        <p class="text-[10px] text-slate-400 flex items-center justify-center space-x-2">
-            <span>🏆 머니투데이 제3회 ETF 투자왕 [연금형]</span>
-            <span>•</span>
-            <span class="text-emerald-400 font-bold">100% 현물 전용 퀀트 시스템</span>
-        </p>
-    </div>
+    <!-- 6. Pinterest Style Footer -->
+    <footer class="bg-pin-canvas border-t border-pin-hairline py-8 px-4 text-center mt-12">
+        <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between text-xs text-pin-mute space-y-3 sm:space-y-0">
+            <div class="flex items-center space-x-2">
+                <span class="w-5 h-5 rounded-full bg-pin-red flex items-center justify-center text-white font-black text-[10px]">P</span>
+                <span class="font-bold text-pin-ink">머니투데이 제3회 ETF 투자왕 [연금형 부문]</span>
+            </div>
+            <p>100% 현물 전용 AI 퀀트 시스템 • Apple Silicon M5 Metal GPU Native</p>
+            <p class="font-mono">© 2026 Pension ETF System</p>
+        </div>
+    </footer>
 
+    <!-- Frontend Script: Real-Time Polling & Chart Animation -->
     <script>
-        const colors = ['#38bdf8', '#818cf8', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#f472b6'];
+        const pinColors = ['#e60023', '#111111', '#435ee5', '#62625b', '#7e238b', '#007a4d'];
         let navHistory = [1000000000, 1000250000, 1000480000, 1000722440];
         let navLabels = ['09:00', '11:00', '13:00', '현재'];
-        let pointBackgroundColors = ['#38bdf8', '#38bdf8', '#fbbf24', '#38bdf8']; // DART 이벤트 시점에 황금색 포인트
+        let dartEventColors = ['#dadad3', '#dadad3', '#e60023', '#111111'];
 
         async function updateDashboard() {
             try {
                 const res = await fetch('/api/dashboard/data');
                 const data = await res.json();
 
-                // 1. 메인 헤더 & 통계 갱신
+                // 1. 헤더 & 메인 메트릭
                 const totalNav = Math.round(data.total_nav_krw);
                 document.getElementById('totalNav').innerText = totalNav.toLocaleString() + ' 원';
                 const ret = data.cumulative_return_pct;
                 const badge = document.getElementById('cumReturnBadge');
-                badge.innerText = (ret >= 0 ? '+' : '') + ret.toFixed(2) + '%';
-                if (ret < 0) {
-                    badge.className = 'text-rose-400 font-bold bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/20 font-mono';
-                }
-                
+                badge.innerText = (ret >= 0 ? '+' : '') + ret.toFixed(2) + '% 수익 중';
+                badge.className = ret >= 0 
+                    ? 'text-[11px] text-emerald-600 font-bold mt-0.5 font-mono' 
+                    : 'text-[11px] text-pin-red font-bold mt-0.5 font-mono';
+
                 document.getElementById('mddVal').innerText = data.max_drawdown_pct.toFixed(2) + '%';
                 const nowTime = data.data_timestamp.split(' ')[1];
-                document.getElementById('dataTime').innerText = nowTime + ' 갱신';
+                document.getElementById('navClock').innerText = nowTime + ' 갱신';
                 document.getElementById('lastTickTime').innerText = '마지막 체결 갱신: ' + nowTime;
 
                 // 환율 추출
                 if (data.macro_indicators && data.macro_indicators.length > 0) {
                     for (const m of data.macro_indicators) {
                         if (m.notes && m.notes.includes('FX')) {
-                            document.getElementById('fxVal').innerText = m.qwen_confidence_score.toFixed(2) + '원';
+                            document.getElementById('fxVal').innerText = m.qwen_confidence_score.toFixed(2) + ' 원';
                         }
                     }
                 }
 
-                // 2. 보유 종목 모바일 카드 렌더링
+                // 2. Pinterest Style Masonry Pin Cards 렌더링
                 const container = document.getElementById('positionCards');
                 container.innerHTML = '';
                 const labels = [];
                 const weights = [];
                 const holdings = Array.isArray(data.holdings) ? data.holdings : [];
-                document.getElementById('holdingCount').innerText = holdings.length + '개 종목';
+                document.getElementById('holdingCount').innerText = holdings.length + '개 종목 보유';
 
                 holdings.forEach((h, idx) => {
                     labels.push(h.name);
                     const weightPct = ((h.valuation_krw / data.total_nav_krw) * 100).toFixed(1);
                     weights.push(weightPct);
 
-                    const card = `
-                        <div class="p-3.5 bg-slate-950/70 border border-slate-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:border-slate-700 transition">
-                            <div class="flex items-center space-x-2.5">
-                                <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${colors[idx % colors.length]};"></span>
-                                <div>
-                                    <h3 class="text-xs font-bold text-white">${h.name}</h3>
-                                    <p class="text-[10px] text-slate-400 font-mono">${h.code} • ${Number(h.shares).toLocaleString()}주</p>
+                    // 핀터레스트 시그니처 오버레이 필 뱃지
+                    let overlayTag = `${weightPct}% 비중`;
+                    let tagClass = "bg-pin-canvas text-pin-ink";
+                    if (idx === 0) {
+                        overlayTag = "🥇 1위 주도 대장주 (40%)";
+                        tagClass = "bg-pin-red text-white";
+                    } else if (idx === 1) {
+                        overlayTag = "🥈 2위 독립 섹터 (30%)";
+                        tagClass = "bg-pin-surface-dark text-white";
+                    } else if (h.name.includes("CD금리") || h.name.includes("SOFR")) {
+                        overlayTag = "🛡️ 무위험 현금 파킹";
+                        tagClass = "bg-pin-secondary-bg text-pin-ink";
+                    }
+
+                    const pinCard = `
+                        <div class="bg-pin-surface-card rounded-2xl p-5 border border-pin-hairline/80 shadow-sm flex flex-col justify-between space-y-4 hover:border-pin-ash transition active:scale-[0.99]">
+                            <div class="space-y-2.5">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${tagClass} shadow-sm">
+                                        ${overlayTag}
+                                    </span>
+                                    <span class="text-[10px] font-mono text-pin-mute">${h.code}</span>
                                 </div>
+                                <h3 class="text-sm font-bold text-pin-ink leading-snug">${h.name}</h3>
+                                <p class="text-xs text-pin-mute font-mono">${Number(h.shares).toLocaleString()} 주 보유</p>
                             </div>
-                            <div class="flex items-center justify-between sm:justify-end sm:space-x-4 border-t sm:border-0 border-slate-800/40 pt-2 sm:pt-0">
-                                <div class="text-left sm:text-right">
-                                    <p class="text-[10px] text-slate-400">현재가 (KRX)</p>
-                                    <p class="text-xs font-bold text-slate-200 font-mono">${Math.round(h.current_price).toLocaleString()}원</p>
+                            <div class="pt-3 border-t border-pin-hairline flex items-end justify-between">
+                                <div>
+                                    <p class="text-[10px] text-pin-mute">KRX 현재가</p>
+                                    <p class="text-xs font-bold text-pin-ink font-mono">${Math.round(h.current_price).toLocaleString()}원</p>
                                 </div>
                                 <div class="text-right">
-                                    <p class="text-[10px] text-slate-400">평가금액 (${weightPct}%)</p>
-                                    <p class="text-xs font-black text-blue-400 font-mono">${Math.round(h.valuation_krw).toLocaleString()}원</p>
+                                    <p class="text-[10px] text-pin-mute">평가금액</p>
+                                    <p class="text-sm font-black text-pin-ink font-mono">${(h.valuation_krw / 100000000).toFixed(2)}억</p>
                                 </div>
                             </div>
                         </div>
                     `;
-                    container.innerHTML += card;
+                    container.innerHTML += pinCard;
                 });
 
-                // 3. 자산 성장 곡선 실시간 차트 갱신 (부드러운 애니메이션)
+                // 3. 자산 성장 곡선 실시간 라인 차트
                 navHistory[navHistory.length - 1] = totalNav;
                 if (window.navLineChart) window.navLineChart.destroy();
                 const navCtx = document.getElementById('navChart').getContext('2d');
@@ -250,14 +335,14 @@
                         datasets: [{
                             label: '10억 원 자산 평가액',
                             data: navHistory,
-                            borderColor: '#38bdf8',
-                            backgroundColor: 'rgba(56, 189, 248, 0.12)',
+                            borderColor: '#e60023', // Pinterest Red
+                            backgroundColor: 'rgba(230, 0, 35, 0.05)',
                             borderWidth: 3,
                             fill: true,
                             tension: 0.35,
-                            pointRadius: [3, 3, 6, 4],
-                            pointBackgroundColor: pointBackgroundColors,
-                            pointBorderColor: '#020617',
+                            pointRadius: [4, 4, 7, 5],
+                            pointBackgroundColor: dartEventColors,
+                            pointBorderColor: '#ffffff',
                             pointBorderWidth: 2
                         }]
                     },
@@ -267,8 +352,8 @@
                         animation: { duration: 600, easing: 'easeInOutQuart' },
                         plugins: { legend: { display: false } },
                         scales: {
-                            x: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#64748b', font: { size: 10 } } },
-                            y: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#64748b', font: { size: 10 }, callback: v => (v/100000000).toFixed(3) + '억' } }
+                            x: { grid: { color: 'rgba(0, 0, 0, 0.04)' }, ticks: { color: '#62625b', font: { size: 11, family: 'Inter' } } },
+                            y: { grid: { color: 'rgba(0, 0, 0, 0.04)' }, ticks: { color: '#62625b', font: { size: 11, family: 'Inter' }, callback: v => (v/100000000).toFixed(3) + '억' } }
                         }
                     }
                 });
@@ -282,9 +367,9 @@
                         labels: labels,
                         datasets: [{
                             data: weights,
-                            backgroundColor: colors.slice(0, labels.length),
+                            backgroundColor: pinColors.slice(0, labels.length),
                             borderWidth: 2,
-                            borderColor: '#020617'
+                            borderColor: '#ffffff'
                         }]
                     },
                     options: {
@@ -295,27 +380,27 @@
                         plugins: {
                             legend: {
                                 position: 'bottom',
-                                labels: { color: '#94a3b8', font: { size: 10, family: 'Pretendard' }, boxWidth: 8, padding: 8 }
+                                labels: { color: '#33332e', font: { size: 11, family: 'Inter' }, boxWidth: 10, padding: 10 }
                             }
                         }
                     }
                 });
 
-                // 5. DART 전자공시 렌더링 (금감원 이벤트 태그 및 하이라이트)
+                // 5. DART 전자공시 렌더링
                 const dContainer = document.getElementById('disclosureContainer');
                 dContainer.innerHTML = '';
                 (data.disclosures || []).forEach((d, dIdx) => {
                     const row = `
-                        <div class="p-3 bg-slate-950/70 border border-slate-800/80 rounded-2xl flex items-center justify-between text-xs hover:border-amber-500/50 transition">
-                            <div class="flex items-center space-x-2 truncate pr-2">
-                                <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 whitespace-nowrap flex items-center">
-                                    <span class="w-1 h-1 rounded-full bg-amber-400 mr-1"></span>
+                        <div class="p-3.5 bg-pin-surface-card rounded-2xl border border-pin-hairline flex items-center justify-between text-xs hover:bg-pin-secondary-bg/50 transition">
+                            <div class="flex items-center space-x-2.5 truncate pr-2">
+                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-pin-canvas text-pin-red border border-pin-hairline whitespace-nowrap flex items-center shadow-xs">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-pin-red mr-1"></span>
                                     DART 공시
                                 </span>
-                                <span class="font-bold text-blue-300 whitespace-nowrap">[${d.corp_name}]</span>
-                                <span class="text-slate-300 truncate">${d.title}</span>
+                                <span class="font-bold text-pin-ink whitespace-nowrap">[${d.corp_name}]</span>
+                                <span class="text-pin-body truncate font-medium">${d.title}</span>
                             </div>
-                            <span class="text-[10px] text-slate-500 whitespace-nowrap font-mono">${d.date}</span>
+                            <span class="text-[11px] text-pin-mute whitespace-nowrap font-mono">${d.date}</span>
                         </div>
                     `;
                     dContainer.innerHTML += row;
