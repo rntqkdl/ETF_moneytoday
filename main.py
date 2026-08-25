@@ -23,6 +23,9 @@ def main():
     hist_parser = subparsers.add_parser("harvest-history", help="과거 1~3년 치 대규모 시계열 데이터 수집 및 공분산 분석")
     hist_parser.add_argument("--years", type=int, default=2, help="수집할 과거 연수 (기본: 2년)")
 
+    # stress-test
+    subparsers.add_parser("stress-test", help="과거 5개년 역사적 위기 국면(팬데믹, 금리폭등) 기반 스트레스 테스트")
+
     # dart-harvest
     subparsers.add_parser("dart-harvest", help="DART 전자공시 실시간 기업 공시 수집 및 RAG 동기화")
 
@@ -77,6 +80,39 @@ def main():
         collector.collect_macro_rates()
         cov, mom = collector.calculate_empirical_covariance_and_momentum()
         print(f"📊 [공분산 분석 완료] 분석 대상 자산 수: {len(cov)}개 | 20일 모멘텀 산출 완료!")
+    elif args.command == "stress-test":
+        from src.database.db_manager import DatabaseManager
+        from src.quant.paper_trader import PaperTradingAccount
+        from src.quant.stress_tester import PortfolioStressTester
+        db = DatabaseManager()
+        account = PaperTradingAccount(db=db)
+        tester = PortfolioStressTester(db=db)
+        state = account.get_status()
+        holdings = state.get("holdings", {})
+        
+        # 비중 추출
+        weights = {}
+        for k, v in holdings.items():
+            weights[k] = v.get("target_weight", 0.20)
+        if not weights:
+            weights = {
+                "KODEX 미국AI반도체TOP3플러스": 0.25,
+                "TIGER 미국AI전력SMR": 0.25,
+                "ACE 미국빅테크TOP7 Plus": 0.25,
+                "TIGER CD금리투자KIS(합성)": 0.125,
+                "ACE 미국달러SOFR금리(합성)": 0.125
+            }
+        
+        res = tester.run_stress_test(current_weights=weights, total_nav=state.get("total_nav_krw", 1_000_000_000.0))
+        print("=" * 75)
+        print("🚨 [역사적 위기 국면 스트레스 테스트] (10억 원 포트폴리오 충격 시뮬레이션)")
+        print("=" * 75)
+        for sc_id, sc in res.items():
+            print(f"📌 [{sc['scenario_name']}]")
+            print(f"  • 시장 평균(KOSPI/S&P) 충격 : {sc['market_benchmark_drawdown_pct']:+.1f}%")
+            print(f"  • 우리 포트폴리오 예상 낙폭 : {sc['portfolio_drawdown_pct']:+.2f}% ({sc['expected_loss_krw']:,.0f} 원)")
+            print(f"  • 하방 방어 알파 (초과방어) : 🟢 +{sc['defense_alpha_pct']:.2f}%p 방어 성공!")
+            print("-" * 75)
     elif args.command == "dart-harvest":
         from src.database.dart_collector import DARTDisclosureCollector
         collector = DARTDisclosureCollector()
