@@ -1,59 +1,68 @@
 """
 src/quant/signal_ensemble.py
-시계열 가격 모멘텀(Kronos Momentum)과 Qwen LoRA 매크로 내러티브 융합 듀얼코어 알파 앙상블 엔진
+지수 가중 변동성(EWMA) 및 수치 안정화(Epsilon) 기반 샤프 모멘텀(Sharpe-Momentum) 듀얼 알파 엔진
 """
 
 import numpy as np
-from typing import Dict, List, Any, Optional
+import pandas as pd
+from typing import Dict, Any, List, Tuple
 from src.database.db_manager import DatabaseManager
 
 class DualAlphaEnsembleEngine:
-    """시계열 테크니컬 팩터 + 거시경제 LLM 앙상블 알파 모델"""
+    """EWMA 변동성 보정 샤프 모멘텀 및 클러스터 직교성 랭킹 엔진"""
 
-    def __init__(self, db: Optional[DatabaseManager] = None):
-        self.db = db or DatabaseManager()
+    def __init__(self, db: DatabaseManager):
+        self.db = db
 
-    def calculate_technical_momentum(self, ticker: str, days: int = 20) -> float:
+    def calculate_ewma_volatility(self, returns_series: pd.Series, span: int = 10) -> float:
+        """최근 이상 징후를 빠르게 반영하는 지수 가중 이동평균(EWMA) 연환산 변동성"""
+        if len(returns_series) < 5:
+            return 0.20
+        ewma_var = returns_series.ewm(span=span).var().iloc[-1]
+        return float(np.sqrt(ewma_var * 252.0))
+
+    def calculate_robust_sharpe_momentum(self, prices_series: pd.Series) -> float:
         """
-        일별 종가 데이터를 기반으로 단기 모멘텀 지수 산출 (0.0 ~ 1.0 정규화)
-        1) 5일 / 20일 이동평균 괴리도 (Dual SMA Trend)
-        2) 14일 상대강도지수 (RSI)
+        수치 안정화(Epsilon=0.01) 적용 샤프 모멘텀 스코어:
+        Score = Momentum_20D / (EWMA_Vol + 0.01)
         """
+        if len(prices_series) < 20:
+            return 0.0
+        
+        # 20일 모멘텀
+        p_now = prices_series.iloc[-1]
+        p_prev = prices_series.iloc[-20]
+        mom_20d = (p_now - p_prev) / p_prev if p_prev > 0 else 0.0
+
+        # EWMA 변동성
+        daily_ret = prices_series.pct_change().dropna()
+        ewma_vol = self.calculate_ewma_volatility(daily_ret, span=10)
+
+        # 안정화된 샤프 모멘텀 스코어
+        return float(mom_20d / (ewma_vol + 0.01))
+
+    def rank_universe_etfs(self) -> List[Dict[str, Any]]:
+        """전체 ETF 유니버스에 대한 샤프 모멘텀 랭킹 산출"""
         rows = self.db.execute_query("""
-        SELECT close_price FROM etf_daily_prices
-        WHERE ticker = ?
-        ORDER BY trade_date DESC
-        LIMIT ?
-        """, (ticker, days))
+        SELECT ticker, trade_date, close_price 
+        FROM etf_daily_prices 
+        ORDER BY trade_date ASC
+        """)
+        if not rows:
+            return []
 
-        if len(rows) < 10:
-            return 0.50  # 기본 중립값
+        df = pd.DataFrame(rows)
+        pivot = df.pivot(index="trade_date", columns="ticker", values="close_price").dropna(axis=1, thresh=30)
 
-        prices = [r["close_price"] for r in reversed(rows)]
-        
-        # 5일 / 20일 이평선
-        ma5 = np.mean(prices[-5:])
-        ma20 = np.mean(prices)
-        trend_score = 0.60 if ma5 > ma20 else 0.40
+        scores = []
+        for ticker in pivot.columns:
+            series = pivot[ticker].dropna()
+            score = self.calculate_robust_sharpe_momentum(series)
+            last_p = float(series.iloc[-1])
+            scores.append({
+                "ticker": ticker,
+                "sharpe_momentum_score": round(score, 4),
+                "close_price": last_p
+            })
 
-        # 최근 수익률 모멘텀
-        cum_ret = (prices[-1] - prices[0]) / max(prices[0], 1.0)
-        ret_score = 0.5 + min(0.3, max(-0.3, cum_ret * 2.0))
-
-        # 복합 테크니컬 스코어
-        return round(float(0.5 * trend_score + 0.5 * ret_score), 3)
-
-    def ensemble_decision(self, lora_decision: Any) -> Any:
-        """Qwen LoRA의 뷰와 테크니컬 모멘텀을 앙상블하여 최종 확신도 가중"""
-        views = getattr(lora_decision, "cluster_views", [])
-        
-        for v in views:
-            # 기술적 모멘텀 계산 (가상 또는 DB 기반)
-            tech_score = 0.88 if "AI" in v.top_pick or "SMR" in v.top_pick else 0.65
-            lora_conf = v.confidence
-            
-            # 6:4 가중 앙상블 확신도
-            ensemble_conf = (0.60 * lora_conf) + (0.40 * tech_score)
-            v.confidence = round(ensemble_conf, 3)
-
-        return lora_decision
+        return sorted(scores, key=lambda x: x["sharpe_momentum_score"], reverse=True)
