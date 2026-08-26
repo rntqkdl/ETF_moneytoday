@@ -83,41 +83,51 @@ def morning_briefing_and_rebalance():
     4. 10억 원 가상 포트폴리오 리밸런싱 집행
     5. 슬랙 알림 카드 자동 발송
     """
-    now_kst = datetime.datetime.now(KST)
-    if now_kst.weekday() >= 5:
-        print(f"🛌 [Scheduler - {now_kst.strftime('%H:%M')}] 주말 휴장일 (절전 모드 유지)")
-        return
+    try:
+        now_kst = datetime.datetime.now(KST)
+        if now_kst.weekday() >= 5:
+            print(f"🛌 [Scheduler - {now_kst.strftime('%H:%M')}] 주말 휴장일 (절전 모드 유지)")
+            return
 
-    print(f"\n⏰ [Scheduler - 08:30] 모닝 기상! 10억 원 AI 퀀트 전략 수립 시작 ({now_kst.strftime('%Y-%m-%d %H:%M')})")
+        print(f"\n⏰ [Scheduler - 08:30] 모닝 기상! 10억 원 AI 퀀트 전략 수립 시작 ({now_kst.strftime('%Y-%m-%d %H:%M')})")
 
-    stage_info = get_current_tournament_stage()
-    print(f"📌 [현재 대회 단계]: {stage_info['stage_name']}")
+        stage_info = get_current_tournament_stage()
+        print(f"📌 [현재 대회 단계]: {stage_info['stage_name']}")
 
-    # 1. DART 수집
-    dart_collector = DARTDisclosureCollector()
-    disclosures = dart_collector.fetch_recent_disclosures(days=1)
-    dart_collector.save_disclosures_to_rag(disclosures)
+        # 1. DART 수집
+        dart_collector = DARTDisclosureCollector()
+        disclosures = dart_collector.fetch_recent_disclosures(days=1)
+        if disclosures:
+            dart_collector.save_disclosures_to_rag(disclosures)
 
-    # 2. 매크로 수집
-    fin_collector = FinancialDataCollector()
-    fin_collector.collect_macro_rates()
+        # 2. 매크로 수집
+        fin_collector = FinancialDataCollector()
+        fin_collector.collect_macro_rates()
 
-    # 3. 5대 멀티 에이전트 위원회 토론 & 의결
-    db = DatabaseManager()
-    committee = MultiAgentConsensusCommittee(db=db)
-    sample_news = disclosures[0]["title"] if disclosures else "AI 반도체 및 원자력 SMR 인프라 수주 모멘텀 지속"
-    report = committee.run_committee_deliberation(news_text=sample_news)
+        # 3. 5대 멀티 에이전트 위원회 토론 & 의결
+        db = DatabaseManager()
+        committee = MultiAgentConsensusCommittee(db=db)
+        
+        sample_news = "AI 반도체 및 원자력 SMR 인프라 수주 모멘텀 지속"
+        if disclosures:
+            d = disclosures[0]
+            sample_news = d.get("title") or f"[{d.get('corp_name', '')}] {d.get('report_name', '')}"
 
-    # 4. 리밸런싱 집행
-    account = PaperTradingAccount(db=db)
-    res = account.rebalance(target_weights=report.final_target_weights, reasoning=report.consensus_decision)
+        report = committee.run_committee_deliberation(news_text=sample_news)
 
-    # 5. 슬랙 알림 발송
-    engine = QuantInferenceEngine()
-    decision = engine.evaluate_news(sample_news)
-    alert_mgr = AlertManager()
-    alert_mgr.send_rebalance_alert(decision, report.final_target_weights, total_nav=res["total_nav_krw"])
-    print(f"✅ [08:30] 모닝 리밸런싱 완료 및 슬랙 보고 발송 완료!\n")
+        # 4. 리밸런싱 집행
+        account = PaperTradingAccount(db=db)
+        res = account.rebalance(target_weights=report.final_target_weights, reasoning=report.consensus_decision)
+
+        # 5. 슬랙 알림 발송
+        engine = QuantInferenceEngine()
+        decision = engine.evaluate_news(sample_news)
+        alert_mgr = AlertManager()
+        alert_mgr.send_rebalance_alert(decision, report.final_target_weights, total_nav=res["total_nav_krw"])
+        print(f"✅ [08:30] 모닝 리밸런싱 완료 및 슬랙 보고 발송 완료!\n")
+
+    except Exception as e:
+        print(f"❌ [Scheduler 08:30 모닝 루틴 예외 발생 (안전 복구)]: {e}")
 
 def intraday_risk_and_circuit_breaker_check():
     """
@@ -125,52 +135,57 @@ def intraday_risk_and_circuit_breaker_check():
     - -4% 급락 감지 시 비상 서킷브레이커 발동 -> 전량 현금 대피
     - +10%/+15%/+20% 도달 시 래칫 익절 락인
     """
-    now_kst = datetime.datetime.now(KST)
-    if now_kst.weekday() >= 5 or not (datetime.time(9, 5) <= now_kst.time() <= datetime.time(15, 30)):
-        return
+    try:
+        now_kst = datetime.datetime.now(KST)
+        if now_kst.weekday() >= 5 or not (datetime.time(9, 5) <= now_kst.time() <= datetime.time(15, 30)):
+            return
 
-    db = DatabaseManager()
-    account = PaperTradingAccount(db=db)
-    risk_engine = TrailingProfitLockEngine(db=db)
-    guard = KRXMarketGuard(db=db)
-    
-    state = account.get_status()
-    holdings = state.get("holdings", {})
-    if not holdings:
-        return
+        db = DatabaseManager()
+        account = PaperTradingAccount(db=db)
+        risk_engine = TrailingProfitLockEngine(db=db)
+        guard = KRXMarketGuard(db=db)
+        
+        state = account.get_status()
+        holdings = state.get("holdings", {})
+        if not holdings:
+            return
 
-    # 최신가 조회
-    price_rows = db.execute_query("""
-        SELECT m.name, p.close_price 
-        FROM etf_daily_prices p
-        JOIN etf_master m ON p.ticker = m.ticker
-        WHERE p.trade_date = (SELECT MAX(trade_date) FROM etf_daily_prices)
-    """)
-    price_map = {r["name"]: float(r["close_price"]) for r in price_rows if r["name"]}
+        price_rows = db.execute_query("""
+            SELECT m.name, p.close_price 
+            FROM etf_daily_prices p
+            JOIN etf_master m ON p.ticker = m.ticker
+            WHERE p.trade_date = (SELECT MAX(trade_date) FROM etf_daily_prices)
+        """)
+        price_map = {r["name"]: float(r["close_price"]) for r in price_rows if r["name"]}
 
-    actions = risk_engine.evaluate_holdings_for_profit_lock(holdings, price_map)
-    for act in actions:
-        if act.get("action") == "EMERGENCY_CIRCUIT_BREAKER_EXIT":
-            print(f"🚨 [장중 비상 서킷브레이커 발동]: {act['name']} - {act['reason']}")
-            # 비상 현금 대피 리밸런싱
-            emergency_weights = {"TIGER CD금리투자KIS(합성)": 0.70, "ACE 미국달러SOFR금리(합성)": 0.30}
-            account.rebalance(emergency_weights, reasoning=f"비상 서킷브레이커 발동: {act['reason']}")
+        actions = risk_engine.evaluate_holdings_for_profit_lock(holdings, price_map)
+        for act in actions:
+            if act.get("action") == "EMERGENCY_CIRCUIT_BREAKER_EXIT":
+                print(f"🚨 [장중 비상 서킷브레이커 발동]: {act['name']} - {act['reason']}")
+                emergency_weights = {"TIGER CD금리투자KIS(합성)": 0.70, "ACE 미국달러SOFR금리(합성)": 0.30}
+                account.rebalance(emergency_weights, reasoning=f"비상 서킷브레이커 발동: {act['reason']}")
+
+    except Exception as e:
+        print(f"❌ [장중 리스크 검사 예외 발생]: {e}")
 
 def market_close_settlement():
     """
     [트리거 3: 평일 15:40 KST]
     - 당일 공식 종가 정산 & 야간 절전 모드 진입
     """
-    now_kst = datetime.datetime.now(KST)
-    if now_kst.weekday() >= 5:
-        return
+    try:
+        now_kst = datetime.datetime.now(KST)
+        if now_kst.weekday() >= 5:
+            return
 
-    print(f"\n🌙 [Scheduler - 15:40] 한국거래소 장 마감! 공식 정산 및 슬랙 일일 결산 보고 발송 ({now_kst.strftime('%Y-%m-%d')})")
-    db = DatabaseManager()
-    account = PaperTradingAccount(db=db)
-    state = account.get_status()
-    print(f"📊 [오늘의 마감 최종 자산]: {state.get('total_nav_krw', 1_000_000_000):,.0f} 원 (누적 수익률: {state.get('cumulative_return_pct', 0.0):+.2f}%)")
-    print(f"💤 내일 아침 08:30까지 시스템 저전력 절전(Sleep) 대기 모드 진입.\n")
+        print(f"\n🌙 [Scheduler - 15:40] 한국거래소 장 마감! 공식 정산 및 슬랙 일일 결산 보고 발송 ({now_kst.strftime('%Y-%m-%d')})")
+        db = DatabaseManager()
+        account = PaperTradingAccount(db=db)
+        state = account.get_status()
+        print(f"📊 [오늘의 마감 최종 자산]: {state.get('total_nav_krw', 1_000_000_000):,.0f} 원 (누적 수익률: {state.get('cumulative_return_pct', 0.0):+.2f}%)")
+        print(f"💤 내일 아침 08:30까지 시스템 저전력 절전(Sleep) 대기 모드 진입.\n")
+    except Exception as e:
+        print(f"❌ [장 마감 정산 예외 발생]: {e}")
 
 def start_daemon_loop():
     """스케줄러 데몬 무한 루프"""
@@ -186,7 +201,10 @@ def start_daemon_loop():
     schedule.every().day.at("15:40").do(market_close_settlement)
 
     while True:
-        schedule.run_pending()
+        try:
+            schedule.run_pending()
+        except Exception as e:
+            print(f"⚠️ [Scheduler 루프 경고]: {e}")
         time.sleep(10)
 
 if __name__ == "__main__":

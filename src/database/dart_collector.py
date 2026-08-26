@@ -73,7 +73,9 @@ class DARTDisclosureCollector:
                 has_key_event = any(k in report_nm for k in ["공급계약", "수주", "자사주", "소각", "영업실적", "잠정실적", "유상증자", "무상증자"])
 
                 if is_core or has_key_event:
+                    title_text = f"[{corp_name}] {report_nm}"
                     filtered.append({
+                        "title": title_text,
                         "corp_name": corp_name,
                         "report_name": report_nm,
                         "date": rcept_dt,
@@ -91,7 +93,7 @@ class DARTDisclosureCollector:
     def save_disclosures_to_rag(self, disclosures: List[Dict[str, Any]]):
         """수집된 공시를 RAG 지식 DB에 적재"""
         for disc in disclosures:
-            title = f"DART 공시: [{disc['corp_name']}] {disc['report_name']}"
+            title = disc.get("title", f"DART 공시: [{disc['corp_name']}] {disc['report_name']}")
             content = f"[{disc['date']}] {disc['corp_name']} 공시 발표: {disc['report_name']}. 공시 상세 링크: {disc['url']}"
             
             self.db.insert_rag_document(
