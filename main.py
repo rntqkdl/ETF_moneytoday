@@ -36,6 +36,15 @@ def main():
     # krx-guard
     subparsers.add_parser("krx-guard", help="KRX ETF 5대 고유 맹점(LP 호가 부재, 환율 드래그, DRIP) 가드레일 상태 점검")
 
+    # trigger-stage
+    subparsers.add_parser("trigger-stage", help="현재 대회 타임라인 단계 및 활성 전략 조회 트리거")
+
+    # trigger-morning
+    subparsers.add_parser("trigger-morning", help="08:30 모닝 리밸런싱 및 슬랙 발송 수동 즉시 실행 트리거")
+
+    # trigger-emergency
+    subparsers.add_parser("trigger-emergency", help="비상 서킷브레이커 전량 현금/CD금리 대피 트리거")
+
     # inav-scan
     subparsers.add_parser("inav-scan", help="iNAV(순자산가치) 괴리율 저평가 차익 기회 및 월배당 스나이핑 스캔")
 
@@ -169,6 +178,29 @@ def main():
         for k, v in rep.final_target_weights.items():
             print(f"  • {k:30s} : {v*100:4.1f}% ({(v * 1_000_000_000):,.0f} 원)")
         print("=" * 80)
+    elif args.command == "trigger-stage":
+        from src.api.scheduler_daemon import get_current_tournament_stage
+        stage = get_current_tournament_stage()
+        print("=" * 80)
+        print("🎯 [대회 타임라인 자동 트리거 상태 진단]")
+        print("=" * 80)
+        print(f"• 단계 ID    : {stage['stage_id']}")
+        print(f"• 단계 명칭  : {stage['stage_name']}")
+        print(f"• 운용 모드  : {stage['mode']}")
+        print(f"• 활성 전략  : {stage['strategy']}")
+        print(f"• 필요 조치  : {stage['action_required']}")
+        print("=" * 80)
+    elif args.command == "trigger-morning":
+        from src.api.scheduler_daemon import morning_briefing_and_rebalance
+        morning_briefing_and_rebalance()
+    elif args.command == "trigger-emergency":
+        from src.database.db_manager import DatabaseManager
+        from src.quant.paper_trader import PaperTradingAccount
+        db = DatabaseManager()
+        account = PaperTradingAccount(db=db)
+        emergency_weights = {"TIGER CD금리투자KIS(합성)": 0.70, "ACE 미국달러SOFR금리(합성)": 0.30}
+        res = account.rebalance(emergency_weights, reasoning="사용자 CLI 수동 비상 현금 대피 트리거 발동")
+        print(f"🚨 [비상 대피 완료] 전량 초단기 CD금리/SOFR 대피 완료 (총자산: {res['total_nav_krw']:,.0f} 원)")
     elif args.command == "krx-guard":
         from src.quant.krx_market_guard import KRXMarketGuard
         guard = KRXMarketGuard()
@@ -176,23 +208,18 @@ def main():
         print("=" * 80)
         print("🛡️ [한국거래소(KRX) ETF 5대 고유 맹점 가드레일 실시간 진단]")
         print("=" * 80)
-        # 1. 09:00~09:05 타임락 & 괴리율 진단
         t_ok, t_msg = guard.check_time_lock_and_disparity("09:15:00", 23965.0, 23920.0)
         print(f"1. [LP 호가 타임락 & 괴리율] : {t_msg}")
 
-        # 2. 유동성 및 스프레드 안전망 진단
         l_ok, l_msg = guard.check_liquidity_safety(adv_20d_krw=3_500_000_000.0, spread_bps=8.5)
         print(f"2. [거래대금 & 스프레드 필터]: {l_msg} (일 35억원 / 스프레드 8.5bp)")
 
-        # 3. 환헤지(H) vs 환노출(UH) 진단
         fx_res = guard.determine_fx_hedge_allocation(usd_krw_rate=1386.53)
         print(f"3. [환율 1,380원대 FX 헤징]   : {fx_res['reason']} (환헤지: {fx_res['H_weight']*100:.0f}%, 환노출: {fx_res['UH_weight']*100:.0f}%)")
 
-        # 4. 연금계좌 15.4% 비과세 DRIP 복리 시뮬레이션
         drip = guard.calculate_pension_drip_reinvestment(dps_krw=65.0, shares_owned=16722, opening_price=23965.0)
         print(f"4. [연금 15.4% 비과세 DRIP]   : 분배금 {drip['total_dividend_inflow_krw']:,.0f}원 발생 -> 시초가 {drip['reinvest_shares']}주 즉시 100% 복리 재투자!")
 
-        # 5. 밸류업 vs 글로벌 AI 듀얼 모멘텀
         rot = guard.calculate_valueup_vs_ai_rotation(valueup_ret_20d=0.038, ai_tech_ret_20d=0.072)
         print(f"5. [밸류업 vs AI 순환매 틸팅]: {rot['reason']}")
         print("=" * 80)
