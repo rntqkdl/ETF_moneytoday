@@ -79,6 +79,14 @@ async def get_dashboard_data():
             "trade_date": pm.get("trade_date", "2026-08-25")
         })
 
+    # 최근 실시간 매매 체결 원장 목록 (Real-time Purchases)
+    trades_raw = db.execute_query("""
+    SELECT trade_timestamp, ticker_name, action, shares, price, amount_krw, reasoning 
+    FROM paper_trades_ledger 
+    ORDER BY id DESC LIMIT 8
+    """)
+    recent_trades = [dict(t) for t in trades_raw] if trades_raw else []
+
     # DART 실시간 공시 목록
     disclosures_raw = db.execute_query("""
     SELECT title, ticker, created_at 
@@ -127,6 +135,7 @@ async def get_dashboard_data():
         "last_rebalanced_at": state.get("last_rebalanced_at", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
         "tournament_stage": stage_info,
         "holdings": holdings_list,
+        "recent_trades": recent_trades,
         "disclosures": disclosures,
         "macro_indicators": [dict(m) for m in macro_rows],
         "is_live_data": True,
