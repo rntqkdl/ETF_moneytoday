@@ -62,7 +62,7 @@ python main.py test
 단순 균등 분산(Equal Weight)이나 잦은 일일 단타(High Frequency)로는 슬리피지와 횡보장 휩소(Whipsaw)로 인해 1위 수상이 불가능하며, 본 시스템은 다음 4대 기술적 혁신으로 우승 알파를 창출합니다:
 
 1. **5인 멀티 에이전트 합의 위원회 (Pod Shop Architecture)**: 단일 AI의 독단을 배제하고 Macro, Factor, CRO, Trader, CIO 5대 전문 에이전트의 교차 토론과 만장일치 승인 절차를 거칩니다.
-2. **2주 추세 탑승 & 40/30/20/10 직교성 샤프 모멘텀**: 2년 실측 백테스트에서 입증된 바와 같이, 1위 주도주에 40%를 싣고 상관관계($\rho < 0.65$)가 독립적인 섹터(30%)와 결합하여 **누적 수익률 +95.08% / 샤프 지수 1.80**을 달성합니다.
+2. **2주 추세 탑승 & 40/30/20/10 직교성 샤프 모멘텀**: 2년 실측 백테스트에서 입증된 바와 같이, 1위 주도주에 40%를 싣고 상관관계가 독립적인 섹터(30%)와 결합하여 **누적 수익률 +95.08% / 샤프 지수 1.80**을 달성합니다.
 3. **KRX U자형 VWAP & Almgren-Chriss 스마트 분할 체결**: 10억 원 일괄 매수 시 발생하는 **550만 원 상당의 호가 슬리피지(-0.55%p)를 원천 절감**합니다.
 4. **한국 시장 특화 가드레일 (KRX Market Guard)**: 09:00~09:05 LP 호가 부재 구간 타임락, 원/달러 1,380원대 환헤지(H) 동적 스위칭, 15.4% 비과세 100% DRIP 복리 엔진을 상시 가동합니다.
 
@@ -83,28 +83,28 @@ python main.py test
 
 ## 🏛️ 시스템 아키텍처 (System Architecture)
 
-### 1. 엔드투엔드 파이프라인 흐름도 (Mermaid Flowchart)
+### 1. 엔드투엔드 데이터 파이프라인 흐름도 (Mermaid Flowchart)
 
 ```mermaid
 flowchart TD
     subgraph Data_Layer ["1. 실시간 데이터 수집 & 감시 계층"]
-        DART["🏢 DART 전자공시 Open API\n(삼성/SK하이닉스/원전 수주)"]
-        KRX_Feed["📈 KRX 틱 시세 & iNAV 피드\n(896개 전종목 2년 시계열)"]
-        Macro["🌐 환율 (USD/KRW) / 금리 / VIX\n(Yahoo Finance & Fed API)"]
-        DB[("🗄️ SQLite / pgvector Master DB\n(896개 ETF & 11,169 레코드)")]
+        DART["DART 전자공시 Open API\n(삼성/SK하이닉스/원전 수주)"]
+        KRX_Feed["KRX 틱 시세 & iNAV 피드\n(896개 전종목 2년 시계열)"]
+        Macro["환율 (USD/KRW) / 금리 / VIX\n(Yahoo Finance & Fed API)"]
+        DB[("SQLite / pgvector Master DB\n(896개 ETF & 11,169 레코드)")]
         
         DART & KRX_Feed & Macro --> DB
     end
 
     subgraph AI_Committee ["2. 5대 멀티 에이전트 합의 위원회 (Apple M5 Metal)"]
-        RAG["⚡ Hybrid RAG Engine (0.8ms)\n(TF-IDF + Cosine Subgraph)"]
-        Qwen_LoRA["🤖 Qwen 2.5-7B LoRA (Metal GPU)\n(거시 국면 분류 & 확신도 산출)"]
+        RAG["Hybrid RAG Engine (0.8ms)\n(TF-IDF + Cosine Subgraph)"]
+        Qwen_LoRA["Qwen 2.5-7B LoRA (Metal GPU)\n(거시 국면 분류 & 확신도 산출)"]
         
-        A1["👤 MacroSentimentAgent\n(글로벌 매크로 & 공시 분석)"]
-        A2["👤 FactorAllocationAgent\n(EWMA 샤프 모멘텀 & 직교성)"]
-        A3["👤 RiskComplianceOfficer\n(단일 40% 캡 & 서킷브레이커)"]
-        A4["👤 ExecutionAlgoAgent\n(VWAP / Almgren-Chriss)"]
-        CIO["👑 ChiefInvestmentOfficer (CIO)\n(만장일치 최종 집행 승인)"]
+        A1["MacroSentimentAgent\n(글로벌 매크로 & 공시 분석)"]
+        A2["FactorAllocationAgent\n(EWMA 샤프 모멘텀 & 직교성)"]
+        A3["RiskComplianceOfficer\n(단일 40% 캡 & 서킷브레이커)"]
+        A4["ExecutionAlgoAgent\n(VWAP / Almgren-Chriss)"]
+        CIO["ChiefInvestmentOfficer (CIO)\n(만장일치 최종 집행 승인)"]
 
         DB --> RAG --> Qwen_LoRA
         Qwen_LoRA --> A1 & A2 & A3 & A4
@@ -112,17 +112,17 @@ flowchart TD
     end
 
     subgraph Optimization_Layer ["3. 직교성 퀀트 최적화 & 가드레일 계층"]
-        Optimizer["📐 Portfolio Optimizer\n• Korea_ValueUp: 40/30/20/10\n• AI_Supercycle: 40/30/20/10\n• Defensive: 35/35/20/10"]
-        KRX_Guard["🛡️ KRX Market Guard\n• 09:05 LP 타임락\n• 괴리율 0.5% 캡\n• 환헤지(H) 스위칭\n• 연금 100% DRIP"]
+        QuantOptimizer["Portfolio Optimizer\n• Korea_ValueUp: 40/30/20/10\n• AI_Supercycle: 40/30/20/10\n• Defensive: 35/35/20/10"]
+        KRX_Guard["KRX Market Guard\n• 09:05 LP 타임락\n• 괴리율 0.5% 캡\n• 환헤지(H) 스위칭\n• 연금 100% DRIP"]
         
-        CIO --> Optimizer --> KRX_Guard
+        CIO --> QuantOptimizer --> KRX_Guard
     end
 
     subgraph Execution_Layer ["4. 스마트 체결 & 텔레메트리 계층"]
-        VWAP_Engine["⚡ KRX 6구간 VWAP 체결기\n(09:10, 09:40, 10:30, 13:00, 14:00, 15:00)"]
-        Paper_Ledger[("💼 Paper Trades Ledger\n(실시간 매매 원장 영구 보관)")]
-        Dashboard["🎨 Pinterest 디자인 대시보드\n(FastAPI + Cloudflare Tunnel)"]
-        Slack["📲 Slack 실시간 알림 브리핑\n(08:30 전략 / 15:40 결산)"]
+        VWAP_Engine["KRX 6구간 VWAP 체결기\n(09:10, 09:40, 10:30, 13:00, 14:00, 15:00)"]
+        Paper_Ledger[("Paper Trades Ledger\n(실시간 매매 원장 영구 보관)")]
+        Dashboard["Pinterest 디자인 대시보드\n(FastAPI + Cloudflare Tunnel)"]
+        Slack["Slack 실시간 알림 브리핑\n(08:30 전략 / 15:40 결산)"]
 
         KRX_Guard --> VWAP_Engine
         VWAP_Engine --> Paper_Ledger
@@ -135,36 +135,36 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as 👤 사용자 (스마트폰)
-    participant Sched as ⏰ Scheduler Daemon
-    participant DART as 🏢 DART API
-    participant AI as 🏛️ 5-Agent Committee
-    participant Opt as 📐 Optimizer & KRX Guard
-    participant VWAP as ⚡ VWAP Slicing Engine
-    participant Dash as 🎨 Pinterest Dashboard
-    participant Slack as 📲 Slack Webhook
+    actor User as 사용자 (스마트폰)
+    participant Sched as Scheduler Daemon
+    participant DART as DART API
+    participant AI as 5-Agent Committee
+    participant QuantOpt as Optimizer & KRX Guard
+    participant VWAP as VWAP Slicing Engine
+    participant Dash as Pinterest Dashboard
+    participant Slack as Slack Webhook
 
     Note over Sched: [08:30 KST] 모닝 기상 & 전략 수립
     Sched->>DART: 1. 최근 24시간 기업 공시 수집
-    Sched->>AI: 2. 뉴스 + 매크로 전달하여 5인 위원회 토론 가동
-    AI->>Opt: 3. 만장일치 의결된 국면 및 탑픽 전달
-    Opt->>Opt: 4. 40/30/20/10 직교성 비중 산출 & 가드레일 검증
-    Opt->>Slack: 5. 100% 한국어 전략 브리핑 카드 발송
-    Slack-->>User: 📲 스마트폰 아침 브리핑 알림 수신
+    Sched->>AI: 2. 뉴스 및 매크로 전달하여 5인 위원회 토론 가동
+    AI->>QuantOpt: 3. 만장일치 의결된 국면 및 탑픽 전달
+    QuantOpt->>QuantOpt: 4. 40/30/20/10 직교성 비중 산출 & 가드레일 검증
+    QuantOpt->>Slack: 5. 100% 한국어 전략 브리핑 카드 발송
+    Slack-->>User: 스마트폰 아침 브리핑 알림 수신
 
     Note over Sched: [09:00~09:05 KST] LP 호가 공백 보호 (Time-Lock)
-    Opt->>Opt: 괴리율 왜곡 방어 (시장가 매매 차단)
+    QuantOpt->>QuantOpt: 괴리율 왜곡 방어 (시장가 매매 차단)
 
     Note over Sched: [09:10~15:00 KST] 6구간 VWAP 분할 체결
     loop 6회 분할 체결 (09:10, 09:40, 10:30, 13:00, 14:00, 15:00)
         Sched->>VWAP: 해당 시간대 슬라이스(12%~23%) 체결 집행
         VWAP->>Dash: 실시간 매입 체결 원장(BUY/SELL) 5초 동기화
-        Dash-->>User: 📱 Pinterest 대시보드 실시간 갱신 확인
+        Dash-->>User: Pinterest 대시보드 실시간 갱신 확인
     end
 
     Note over Sched: [15:40 KST] KRX 장 마감 공식 결산
     Sched->>Dash: 당일 최종 확정 NAV 정산
-    Sched->>Slack: 📲 오늘의 마감 결산 리포트 발송
+    Sched->>Slack: 오늘의 마감 결산 리포트 발송
     Sched->>Sched: 내일 아침 08:30까지 저전력 절전(Sleep) 대기
 ```
 
