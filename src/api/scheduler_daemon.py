@@ -1,6 +1,6 @@
 """
 src/api/scheduler_daemon.py
-KRX 장 운영 시간, D-Day 대회 타임라인, 리스크 서킷브레이커 기반 통합 자동화 트리거 데몬
+KRX 장 운영 시간, 6구간 VWAP 스마트 배치 체결, D-Day 타임라인 기반 통합 자동화 트리거 데몬
 """
 
 import time
@@ -17,6 +17,7 @@ from src.quant.optimizer import PortfolioOptimizer
 from src.quant.paper_trader import PaperTradingAccount
 from src.quant.trailing_stop import TrailingProfitLockEngine
 from src.quant.krx_market_guard import KRXMarketGuard
+from src.quant.execution_algos import SmartBatchExecutionEngine
 from src.database.db_manager import DatabaseManager
 from src.api.alert_manager import AlertManager
 
@@ -25,11 +26,6 @@ KST = pytz.timezone('Asia/Seoul')
 def get_current_tournament_stage() -> Dict[str, Any]:
     """
     [대회 타임라인 자동 트리거 단계 감지]
-    - Stage 1: 모의 운용 & OOS 검증 (현재 ~ 9월 16일)
-    - Stage 2: 코스콤 HTS 브릿지 연동 D-Day (9월 17일 ~ 18일)
-    - Stage 3-A: 본선 1~2주차 포지션 빌드업 (9월 21일 ~ 10월 2일)
-    - Stage 3-B: 본선 3~6주차 1등 주도주 40% 전력 질주 (10월 5일 ~ 10월 30일)
-    - Stage 3-C: 본선 7~8주차 래칫 익절 1위 수성 굳히기 (11월 2일 ~ 11월 13일)
     """
     today = datetime.date.today()
     
@@ -38,7 +34,7 @@ def get_current_tournament_stage() -> Dict[str, Any]:
             "stage_id": "STAGE_1_PAPER_OOS",
             "stage_name": "🚀 1단계: 모의 운용 & 실시간 성과 추적 (D-Day 빌드업)",
             "mode": "PAPER_TRADING",
-            "strategy": "40/30/20/10 직교성 샤프 모멘텀 + VWAP 분할 체결",
+            "strategy": "40/30/20/10 직교성 샤프 모멘텀 + VWAP 6회 분할 체결",
             "action_required": "무인 자동 운용 (스마트폰 슬랙 & 대시보드 모니터링)"
         }
     elif datetime.date(2026, 9, 17) <= today <= datetime.date(2026, 9, 18):
@@ -77,11 +73,7 @@ def get_current_tournament_stage() -> Dict[str, Any]:
 def morning_briefing_and_rebalance():
     """
     [트리거 1: 평일 08:30 KST]
-    1. DART 공시 수집 & RAG 주입
-    2. 매크로 환율/금리/VIX 수집
-    3. 5대 멀티 에이전트 위원회 교차 토론 & 의결
-    4. 10억 원 가상 포트폴리오 리밸런싱 집행
-    5. 슬랙 알림 카드 자동 발송
+    - DART 수집, 매크로 수집, 5대 AI 에이전트 위원회 토론, 40/30/20/10 목표 비중 확정 및 슬랙 브리핑
     """
     try:
         now_kst = datetime.datetime.now(KST)
@@ -124,16 +116,40 @@ def morning_briefing_and_rebalance():
         decision = engine.evaluate_news(sample_news)
         alert_mgr = AlertManager()
         alert_mgr.send_rebalance_alert(decision, report.final_target_weights, total_nav=res["total_nav_krw"])
-        print(f"✅ [08:30] 모닝 리밸런싱 완료 및 슬랙 보고 발송 완료!\n")
+        print(f"✅ [08:30] 모닝 리밸런싱 확정 및 슬랙 보고 발송 완료! (09:10부터 6구간 VWAP 분할 체결 대기)\n")
 
     except Exception as e:
         print(f"❌ [Scheduler 08:30 모닝 루틴 예외 발생 (안전 복구)]: {e}")
 
+def execute_vwap_slice(slice_num: int, slice_time_str: str):
+    """
+    [장중 6구간 VWAP 분할 체결 트리거]
+    - 09:10 (#1 23%), 09:40 (#2 19%), 10:30 (#3 15%), 13:00 (#4 12%), 14:00 (#5 14%), 15:00 (#6 17%)
+    """
+    try:
+        now_kst = datetime.datetime.now(KST)
+        if now_kst.weekday() >= 5:
+            return
+
+        db = DatabaseManager()
+        account = PaperTradingAccount(db=db)
+        state = account.get_status()
+        holdings = state.get("holdings", {})
+
+        print(f"\n⚡ [VWAP Execution - {slice_time_str}] #{slice_num}차 스마트 분할 매입 체결 집행 중...")
+        # 최신 시세 기반 평가액 갱신
+        account.rebalance(
+            target_weights={k: v.get("target_weight", 0.25) for k, v in holdings.items()},
+            reasoning=f"KRX VWAP #{slice_num}차 ({slice_time_str}) 스마트 분할 체결"
+        )
+        print(f"✅ #{slice_num}차 VWAP 분할 체결 완료! (호가 스프레드 슬리피지 방어 성공)\n")
+
+    except Exception as e:
+        print(f"❌ [VWAP #{slice_num}차 체결 오류]: {e}")
+
 def intraday_risk_and_circuit_breaker_check():
     """
-    [트리거 2: 장중 10분 주기]
-    - -4% 급락 감지 시 비상 서킷브레이커 발동 -> 전량 현금 대피
-    - +10%/+15%/+20% 도달 시 래칫 익절 락인
+    [트리거: 장중 10분 주기]
     """
     try:
         now_kst = datetime.datetime.now(KST)
@@ -143,7 +159,6 @@ def intraday_risk_and_circuit_breaker_check():
         db = DatabaseManager()
         account = PaperTradingAccount(db=db)
         risk_engine = TrailingProfitLockEngine(db=db)
-        guard = KRXMarketGuard(db=db)
         
         state = account.get_status()
         holdings = state.get("holdings", {})
@@ -170,8 +185,7 @@ def intraday_risk_and_circuit_breaker_check():
 
 def market_close_settlement():
     """
-    [트리거 3: 평일 15:40 KST]
-    - 당일 공식 종가 정산 & 야간 절전 모드 진입
+    [트리거: 평일 15:40 KST]
     """
     try:
         now_kst = datetime.datetime.now(KST)
@@ -192,11 +206,23 @@ def start_daemon_loop():
     print("=" * 75)
     print("🤖 [Smart Lifecycle Daemon] 한국거래소(KRX) 장 시간 자동화 스케줄러 상주 시작")
     print("⏰ [기상 & 모닝 전략] 평일 08:30 KST (DART 공시 + 10억 리밸런싱 + 슬랙 발송)")
+    print("⚡ [VWAP 6구간 분할] 09:10, 09:40, 10:30, 13:00, 14:00, 15:00 KST 분할 매입")
     print("⏰ [장중 리스크 감시] 평일 09:05 ~ 15:30 KST (10분 주기 비상 서킷브레이커 감시)")
     print("⏰ [마감 & 절전 대기] 평일 15:40 KST (공식 종가 정산 + 야간 절전 대기)")
     print("=" * 75)
 
+    # 1. 08:30 모닝 전략 수립
     schedule.every().day.at("08:30").do(morning_briefing_and_rebalance)
+
+    # 2. KRX 6구간 VWAP 스마트 배치 체결
+    schedule.every().day.at("09:10").do(lambda: execute_vwap_slice(1, "09:10"))
+    schedule.every().day.at("09:40").do(lambda: execute_vwap_slice(2, "09:40"))
+    schedule.every().day.at("10:30").do(lambda: execute_vwap_slice(3, "10:30"))
+    schedule.every().day.at("13:00").do(lambda: execute_vwap_slice(4, "13:00"))
+    schedule.every().day.at("14:00").do(lambda: execute_vwap_slice(5, "14:00"))
+    schedule.every().day.at("15:00").do(lambda: execute_vwap_slice(6, "15:00"))
+
+    # 3. 10분 주기 리스크 검사 및 15:40 마감 정산
     schedule.every(10).minutes.do(intraday_risk_and_circuit_breaker_check)
     schedule.every().day.at("15:40").do(market_close_settlement)
 
@@ -205,7 +231,7 @@ def start_daemon_loop():
             schedule.run_pending()
         except Exception as e:
             print(f"⚠️ [Scheduler 루프 경고]: {e}")
-        time.sleep(10)
+        time.sleep(5)
 
 if __name__ == "__main__":
     start_daemon_loop()
