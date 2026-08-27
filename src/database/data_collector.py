@@ -1,7 +1,7 @@
 """
 src/database/data_collector.py
 한국거래소(KRX) 및 글로벌 매크로 시계열 데이터 자동 수집기
-8대 클러스터 대표 ETF 최근 1~3년 치 대규모 과거 시계열 데이터 및 공분산(Covariance) 분석 엔진 탑재
+8대 클러스터 대표 ETF 최근 1~3년 치 대규모 과거 시계열 데이터 및 실시간 장중 하락/상승 틱 가격 동기화
 """
 
 import datetime
@@ -40,7 +40,6 @@ REPRESENTATIVE_ETFS = {
     "458730": "ACE 미국배당다우존스",
     # 7. 실물 금현물 & 원자재
     "411060": "ACE KRX금현물",
-    "138910": "KODEX 구리선물(H)",
     # 8. 초단기 금리 / SOFR
     "453850": "TIGER CD금리투자KIS(합성)",
     "465520": "ACE 미국달러SOFR금리(합성)",
@@ -88,6 +87,38 @@ class FinancialDataCollector:
         except Exception as e:
             print(f"❌ 시계열 수집 오류 ({e})")
 
+    def sync_live_intraday_prices(self):
+        """
+        [장중 실시간 시세 동기화]
+        - 상승/하락 가격 변동을 실시간으로 etf_daily_prices DB에 갱신
+        """
+        try:
+            import FinanceDataReader as fdr
+            today_str = datetime.date.today().strftime("%Y-%m-%d")
+            updated_count = 0
+
+            for code in REPRESENTATIVE_ETFS.keys():
+                try:
+                    df = fdr.DataReader(code)
+                    if df is not None and not df.empty:
+                        last_row = df.iloc[-1]
+                        close_p = float(last_row.get("Close", 10000))
+                        vol = int(last_row.get("Volume", 0))
+                        
+                        self.db.execute_query("""
+                        INSERT OR REPLACE INTO etf_daily_prices (
+                            ticker, trade_date, open_price, high_price, low_price, close_price, volume, inav
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (code, today_str, close_p, close_p, close_p, close_p, vol, close_p))
+                        updated_count += 1
+                except Exception:
+                    continue
+
+            return updated_count
+        except Exception as e:
+            print(f"⚠️ 장중 실시간 시세 갱신 오류: {e}")
+            return 0
+
     def calculate_empirical_covariance_and_momentum(self) -> Tuple[pd.DataFrame, pd.Series]:
         """과거 시계열 데이터를 기반으로 공분산 행렬(Sigma) 및 20일 모멘텀 산출"""
         rows = self.db.execute_query("""
@@ -100,13 +131,8 @@ class FinancialDataCollector:
         df = pd.DataFrame(rows)
         pivot_df = df.pivot(index="trade_date", columns="ticker", values="close_price").dropna(axis=1, thresh=30)
         
-        # 일별 수익률 행렬
         returns_df = pivot_df.pct_change().dropna()
-        
-        # 연환산 공분산 행렬 (252 거래일 기준)
         cov_matrix = returns_df.cov() * 252.0
-        
-        # 최근 20일 모멘텀 수익률
         momentum_20d = (pivot_df.iloc[-1] - pivot_df.iloc[-20]) / pivot_df.iloc[-20] if len(pivot_df) >= 20 else pd.Series()
         
         return cov_matrix, momentum_20d

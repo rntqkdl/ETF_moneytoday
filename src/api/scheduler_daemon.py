@@ -1,6 +1,6 @@
 """
 src/api/scheduler_daemon.py
-KRX 장 운영 시간, 증권사 리서치/수급 크롤러, 6구간 VWAP 스마트 배치 체결 기반 통합 자동화 데몬
+KRX 장 운영 시간, 실시간 가격 하락/상승 틱 동기화, 6구간 VWAP 스마트 배치 체결 기반 통합 자동화 데몬
 """
 
 import time
@@ -177,6 +177,8 @@ def execute_vwap_slice(slice_num: int, slice_time_str: str):
 def intraday_risk_and_circuit_breaker_check():
     """
     [트리거: 장중 10분 주기]
+    - 실시간 장중 시세(상승/하락 틱)를 etf_daily_prices DB에 갱신
+    - 하락 폭 감지 및 -4% 급락 시 비상 서킷브레이커 발동
     """
     try:
         now_kst = datetime.datetime.now(KST)
@@ -184,6 +186,11 @@ def intraday_risk_and_circuit_breaker_check():
             return
 
         db = DatabaseManager()
+        fin_col = FinancialDataCollector(db=db)
+        
+        # 1. 장중 실시간 가격 틱(상승/하락) DB 동기화
+        fin_col.sync_live_intraday_prices()
+
         account = PaperTradingAccount(db=db)
         risk_engine = TrailingProfitLockEngine(db=db)
         
@@ -200,6 +207,7 @@ def intraday_risk_and_circuit_breaker_check():
         """)
         price_map = {r["name"]: float(r["close_price"]) for r in price_rows if r["name"]}
 
+        # 2. 하락 종목 감지 및 서킷브레이커 검사
         actions = risk_engine.evaluate_holdings_for_profit_lock(holdings, price_map)
         for act in actions:
             if act.get("action") == "EMERGENCY_CIRCUIT_BREAKER_EXIT":
@@ -235,17 +243,13 @@ def start_daemon_loop():
     print("📡 [08:00] 증권사 퀀트 리서치 & 스마트 수급 크롤러 RAG 인덱싱")
     print("⏰ [08:30] DART 공시 + 거시 매크로 + 10억 리밸런싱 + 슬랙 발송")
     print("⚡ [VWAP 6구간 분할] 09:10, 09:40, 10:30, 13:00, 14:00, 15:00 KST 분할 매입")
-    print("⏰ [장중 리스크 감시] 평일 09:05 ~ 15:30 KST (10분 주기 비상 서킷브레이커 감시)")
+    print("🔍 [장중 실시간 틱 동기화] 09:05 ~ 15:30 (10분 주기 실시간 가격 갱신 & -4% 서킷브레이커)")
     print("⏰ [마감 & 절전 대기] 평일 15:40 KST (공식 종가 정산 + 야간 절전 대기)")
     print("=" * 75)
 
-    # 0. 08:00 증권사 리포트 & 스마트 수급 크롤링
     schedule.every().day.at("08:00").do(early_morning_intelligence_harvest)
-
-    # 1. 08:30 모닝 전략 수립
     schedule.every().day.at("08:30").do(morning_briefing_and_rebalance)
 
-    # 2. KRX 6구간 VWAP 스마트 배치 체결
     schedule.every().day.at("09:10").do(lambda: execute_vwap_slice(1, "09:10"))
     schedule.every().day.at("09:40").do(lambda: execute_vwap_slice(2, "09:40"))
     schedule.every().day.at("10:30").do(lambda: execute_vwap_slice(3, "10:30"))
@@ -253,7 +257,6 @@ def start_daemon_loop():
     schedule.every().day.at("14:00").do(lambda: execute_vwap_slice(5, "14:00"))
     schedule.every().day.at("15:00").do(lambda: execute_vwap_slice(6, "15:00"))
 
-    # 3. 10분 주기 리스크 검사 및 15:40 마감 정산
     schedule.every(10).minutes.do(intraday_risk_and_circuit_breaker_check)
     schedule.every().day.at("15:40").do(market_close_settlement)
 
