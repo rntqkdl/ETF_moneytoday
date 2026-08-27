@@ -1,132 +1,141 @@
 """
 src/api/routes.py
-FastAPI 엔드포인트: 
-- GET /health
-- GET /api/dashboard/data
-- GET /dashboard (HTML)
-- POST /api/trigger/morning (즉시 모닝 리밸런싱 트리거)
-- POST /api/trigger/risk-check (즉시 리스크/서킷브레이커 트리거)
-- POST /api/trigger/stage-check (현재 대회 단계 조회 트리거)
-- POST /api/trigger/emergency-exit (비상 현금 대피 트리거)
+FastAPI 엔드포인트 라우터 (RESTful DTO & Enterprise Service Controller 계층)
 """
 
-import json
 import datetime
 from pathlib import Path
-from fastapi import APIRouter, Request, HTTPException
+from typing import Dict, Any, List, Optional
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 
 from src.database.db_manager import DatabaseManager
+from src.database.models import QuantDecisionOutput, PortfolioAllocationLog
+from src.quant.harness import ComplianceHarness
+from src.quant.optimizer import PortfolioOptimizer
+from src.quant.execution_twap import TWAPExecutionEngine
 from src.quant.paper_trader import PaperTradingAccount
-from src.quant.telemetry import PortfolioTelemetry
-from src.api.alert_manager import AlertManager
+from src.ai.inference_engine import QuantInferenceEngine
 from src.api.scheduler_daemon import (
-    get_current_tournament_stage, 
-    morning_briefing_and_rebalance, 
+    get_current_tournament_stage,
+    morning_briefing_and_rebalance,
     intraday_risk_and_circuit_breaker_check
 )
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+# DTO 요청/응답 모델
+class RebalanceRequest(BaseModel):
+    news_text: str = Field(..., description="매크로 뉴스 또는 산업 속보 텍스트")
+
+class RebalanceResponse(BaseModel):
+    status: str
+    regime: str
+    confidence: float
+    target_weights: Dict[str, float]
+    total_nav_krw: float
+    reasoning: str
+    timestamp: str
+
+def get_db():
+    return DatabaseManager()
+
+# -----------------
+# 📊 RESTful API 엔드포인트
+# -----------------
 
 @router.get("/health")
-async def health_check():
-    db = DatabaseManager()
-    count_row = db.execute_query("SELECT COUNT(*) as cnt FROM etf_master")
-    cnt = count_row[0]["cnt"] if count_row else 893
+async def health_check(db: DatabaseManager = Depends(get_db)):
+    """서버 상태 점검"""
+    etf_count = db.execute_query("SELECT COUNT(*) as cnt FROM etf_master")[0]["cnt"]
     return {
         "status": "HEALTHY",
-        "indexed_etfs": cnt,
-        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "engine": "Apple Silicon M5 Metal GPU Native",
-        "competition": "MoneyToday 3rd ETF Championship (Pension League)"
+        "service": "Pension ETF AI Quant Engine",
+        "version": "2.0.0",
+        "indexed_etfs": etf_count
     }
 
+@router.post("/api/v1/rebalance", response_model=RebalanceResponse)
+async def trigger_rebalance(req: RebalanceRequest, db: DatabaseManager = Depends(get_db)):
+    """실시간 뉴스 기반 AI 퀀트 리밸런싱 실행"""
+    engine = QuantInferenceEngine()
+    harness = ComplianceHarness(db=db)
+    optimizer = PortfolioOptimizer(harness=harness)
+    account = PaperTradingAccount(db=db)
+
+    decision = engine.evaluate_news(req.news_text)
+    weights = optimizer.calculate_weights(decision)
+    res = account.rebalance(target_weights=weights, reasoning=decision.reasoning)
+
+    return RebalanceResponse(
+        status="SUCCESS",
+        regime=decision.regime,
+        confidence=decision.confidence_score,
+        target_weights=weights,
+        total_nav_krw=res["total_nav_krw"],
+        reasoning=decision.reasoning,
+        timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+
 @router.get("/api/dashboard/data")
-async def get_dashboard_data():
-    """모바일 대시보드용 실시간 종합 데이터 반환"""
-    db = DatabaseManager()
+async def get_dashboard_data(db: DatabaseManager = Depends(get_db)):
+    """실시간 웹 대시보드용 통합 JSON 데이터 제공"""
     account = PaperTradingAccount(db=db)
     state = account.get_status()
-
-    # 최신 KRX 일봉 및 iNAV 시세 매핑
-    price_rows = db.execute_query("""
-    SELECT p.ticker, m.name, p.close_price, p.volume, p.trade_date 
-    FROM etf_daily_prices p
-    JOIN etf_master m ON p.ticker = m.ticker
-    WHERE p.trade_date = (SELECT MAX(trade_date) FROM etf_daily_prices)
-    """)
-    price_map = {r["name"]: r for r in price_rows if r["name"]}
+    stage_info = get_current_tournament_stage()
 
     holdings_list = []
-    raw_holdings = state.get("holdings", {})
-    
-    for name, info in raw_holdings.items():
-        pm = price_map.get(name, {})
-        cur_p = float(pm.get("close_price", info.get("avg_price", 10000.0)))
-        shares = int(info.get("shares", 0))
-        val_krw = shares * cur_p if shares > 0 else float(info.get("valuation_krw", 0.0))
-        
+    for name, info in state.get("holdings", {}).items():
+        price_row = db.execute_query(
+            "SELECT close_price, volume, trade_date FROM etf_daily_prices WHERE ticker = ? ORDER BY trade_date DESC LIMIT 1",
+            (info.get("ticker", "000000"),)
+        )
+        cur_price = float(price_row[0]["close_price"]) if price_row else info.get("avg_price", 10000.0)
+        cur_vol = int(price_row[0]["volume"]) if price_row else 0
+        cur_date = price_row[0]["trade_date"] if price_row else "2026-08-27"
+
         holdings_list.append({
             "name": name,
-            "code": pm.get("ticker", "000000"),
-            "shares": shares,
-            "current_price": cur_p,
-            "valuation_krw": val_krw,
-            "target_weight": float(info.get("target_weight", 0.25)),
-            "volume": int(pm.get("volume", 0)),
-            "trade_date": pm.get("trade_date", "2026-08-25")
+            "code": info.get("ticker", "000000"),
+            "shares": info.get("shares", 0),
+            "current_price": cur_price,
+            "valuation_krw": info.get("shares", 0) * cur_price,
+            "target_weight": info.get("target_weight", 0.25),
+            "volume": cur_vol,
+            "trade_date": cur_date
         })
 
-    # 최근 실시간 매매 체결 원장 목록 (Real-time Purchases)
-    trades_raw = db.execute_query("""
-    SELECT trade_timestamp, ticker_name, action, shares, price, amount_krw, reasoning 
-    FROM paper_trades_ledger 
-    ORDER BY id DESC LIMIT 8
+    trades_rows = db.execute_query("""
+        SELECT id, trade_timestamp, ticker_name, action, shares, price, amount_krw, reasoning
+        FROM paper_trades_ledger
+        ORDER BY id DESC LIMIT 10
     """)
-    recent_trades = [dict(t) for t in trades_raw] if trades_raw else []
+    recent_trades = [dict(r) for r in trades_rows] if trades_rows else []
 
-    # DART 실시간 공시 목록
-    disclosures_raw = db.execute_query("""
-    SELECT title, ticker, created_at 
-    FROM etf_rag_documents 
-    WHERE document_type = 'DART_DISCLOSURE' 
-    ORDER BY created_at DESC LIMIT 5
+    disclosures_rows = db.execute_query("""
+        SELECT title, metadata, created_at 
+        FROM etf_rag_documents 
+        WHERE document_type IN ('DART_DISCLOSURE', 'INSTITUTIONAL_RESEARCH')
+        ORDER BY id DESC LIMIT 8
     """)
     
+    import json
     disclosures = []
-    if disclosures_raw:
-        for d in disclosures_raw:
-            disclosures.append({
-                "title": d["title"],
-                "corp_name": d["ticker"] if d["ticker"] else "기업공시",
-                "date": d["created_at"].split(" ")[0] if d["created_at"] else "2026-08-25",
-                "url": "https://dart.fss.or.kr"
-            })
-    else:
-        disclosures = [{
-            "title": "DART 실시간 공시 감시 가동 중",
-            "corp_name": "삼성전자 / SK하이닉스 / 한화에어로스페이스",
-            "date": datetime.date.today().strftime("%Y-%m-%d"),
-            "url": "https://dart.fss.or.kr"
-        }]
+    for d in disclosures_rows:
+        meta = json.loads(d["metadata"]) if d.get("metadata") else {}
+        disclosures.append({
+            "corp_name": meta.get("corp_name") or meta.get("broker") or "기업공시",
+            "title": d.get("title", ""),
+            "date": meta.get("date") or d.get("created_at", "")[:10]
+        })
 
-    # 매크로 지표 목록
     macro_rows = db.execute_query("""
-    SELECT notes, qwen_confidence_score 
-    FROM portfolio_allocation_log 
-    WHERE notes LIKE '%index%' 
-    ORDER BY id DESC LIMIT 3
+        SELECT regime_detected, qwen_confidence_score, notes
+        FROM portfolio_allocation_log
+        WHERE regime_detected LIKE 'MACRO_%'
+        ORDER BY id DESC LIMIT 3
     """)
-    if not macro_rows:
-        macro_rows = [
-            {"notes": "VOLATILITY index: 15.85", "qwen_confidence_score": 15.85},
-            {"notes": "INTEREST_RATE index: 4.70", "qwen_confidence_score": 4.70},
-            {"notes": "FX index: 1386.53", "qwen_confidence_score": 1386.53}
-        ]
-
-    stage_info = get_current_tournament_stage()
 
     return {
         "total_nav_krw": state.get("total_nav_krw", 1_000_000_000.0),
@@ -144,8 +153,13 @@ async def get_dashboard_data():
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def serve_dashboard(request: Request):
-    """Pinterest 스타일 대시보드 렌더링"""
-    return templates.TemplateResponse(request=request, name="dashboard.html")
+    """Pinterest / Bloomberg 스타일 Enterprise Vue.js 3 대시보드 렌더링"""
+    template_path = Path(__file__).parent / "templates" / "dashboard.html"
+    if template_path.exists():
+        with open(template_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    return HTMLResponse(content="<h1>Dashboard Template Not Found</h1>", status_code=404)
 
 # -----------------
 # ⚡ 자동화 트리거 엔드포인트
@@ -159,21 +173,6 @@ async def trigger_morning_routine():
 
 @router.post("/api/trigger/risk-check")
 async def trigger_risk_check():
-    """즉시 장중 리스크/서킷브레이커 검사 트리거"""
+    """장중 실시간 틱 동기화 및 서킷브레이커 검사 즉시 실행"""
     intraday_risk_and_circuit_breaker_check()
-    return {"status": "SUCCESS", "message": "장중 서킷브레이커 리스크 검사 완료"}
-
-@router.post("/api/trigger/stage-check")
-async def trigger_stage_check():
-    """현재 대회 단계 및 활성 전략 조회 트리거"""
-    stage = get_current_tournament_stage()
-    return {"status": "SUCCESS", "current_stage": stage}
-
-@router.post("/api/trigger/emergency-exit")
-async def trigger_emergency_exit():
-    """비상 현금 대피 강제 트리거"""
-    db = DatabaseManager()
-    account = PaperTradingAccount(db=db)
-    emergency_weights = {"TIGER CD금리투자KIS(합성)": 0.70, "ACE 미국달러SOFR금리(합성)": 0.30}
-    res = account.rebalance(emergency_weights, reasoning="사용자 수동 비상 현금 대피 트리거 발동")
-    return {"status": "SUCCESS", "message": "전량 초단기 CD금리/SOFR 대피 완료", "nav": res["total_nav_krw"]}
+    return {"status": "SUCCESS", "message": "실시간 가격 갱신 및 리스크 점검 완료"}

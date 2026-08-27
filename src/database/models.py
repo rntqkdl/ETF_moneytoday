@@ -47,3 +47,11 @@ class QuantDecisionOutput(BaseModel):
     cluster_views: List[ClusterViewItem]
     cash_park_ratio: float
     reasoning: str
+
+class PortfolioAllocationLog(BaseModel):
+    id: Optional[int] = None
+    regime_detected: str
+    qwen_confidence_score: float
+    target_weights: str
+    execution_status: str
+    notes: Optional[str] = None
