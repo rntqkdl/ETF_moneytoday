@@ -1,6 +1,6 @@
 """
 src/api/scheduler_daemon.py
-KRX 장 운영 시간, 6구간 VWAP 스마트 배치 체결, D-Day 타임라인 기반 통합 자동화 트리거 데몬
+KRX 장 운영 시간, 증권사 리서치/수급 크롤러, 6구간 VWAP 스마트 배치 체결 기반 통합 자동화 데몬
 """
 
 import time
@@ -10,6 +10,8 @@ import pytz
 from typing import Dict, Any, Tuple
 from src.database.data_collector import FinancialDataCollector
 from src.database.dart_collector import DARTDisclosureCollector
+from src.database.research_report_collector import InstitutionalResearchCollector
+from src.database.institutional_flow_collector import InstitutionalFlowCollector
 from src.ai.inference_engine import QuantInferenceEngine
 from src.ai.multi_agent_consensus import MultiAgentConsensusCommittee
 from src.quant.harness import ComplianceHarness
@@ -70,6 +72,33 @@ def get_current_tournament_stage() -> Dict[str, Any]:
             "action_required": "1위 수익률 안전 보존 및 우승 확정"
         }
 
+def early_morning_intelligence_harvest():
+    """
+    [트리거 0: 평일 08:00 KST]
+    - 증권사 최신 ETF 퀀트 리서치 리포트 크롤링 & RAG 주입
+    - KRX 외국인/기관 순매수 스마트 수급 데이터 수집 & RAG 주입
+    """
+    try:
+        now_kst = datetime.datetime.now(KST)
+        if now_kst.weekday() >= 5:
+            return
+
+        print(f"\n📡 [Scheduler - 08:00] 증권사 퀀트 리포트 및 스마트 수급 인텔리전스 수집 시작 ({now_kst.strftime('%Y-%m-%d')})")
+        
+        # 1. 증권사 리서치 수집
+        research_col = InstitutionalResearchCollector()
+        reports = research_col.fetch_daily_etf_strategy_reports()
+        research_col.save_reports_to_rag(reports)
+
+        # 2. 스마트 수급 수집
+        flow_col = InstitutionalFlowCollector()
+        flows = flow_col.fetch_smart_money_flows()
+        flow_col.save_flows_to_rag(flows)
+
+        print("✅ [08:00] 증권사 리서치 및 KRX 스마트 수급 RAG 동기화 100% 완료!\n")
+    except Exception as e:
+        print(f"❌ [Scheduler 08:00 인텔리전스 수집 예외]: {e}")
+
 def morning_briefing_and_rebalance():
     """
     [트리거 1: 평일 08:30 KST]
@@ -124,7 +153,6 @@ def morning_briefing_and_rebalance():
 def execute_vwap_slice(slice_num: int, slice_time_str: str):
     """
     [장중 6구간 VWAP 분할 체결 트리거]
-    - 09:10 (#1 23%), 09:40 (#2 19%), 10:30 (#3 15%), 13:00 (#4 12%), 14:00 (#5 14%), 15:00 (#6 17%)
     """
     try:
         now_kst = datetime.datetime.now(KST)
@@ -137,7 +165,6 @@ def execute_vwap_slice(slice_num: int, slice_time_str: str):
         holdings = state.get("holdings", {})
 
         print(f"\n⚡ [VWAP Execution - {slice_time_str}] #{slice_num}차 스마트 분할 매입 체결 집행 중...")
-        # 최신 시세 기반 평가액 갱신
         account.rebalance(
             target_weights={k: v.get("target_weight", 0.25) for k, v in holdings.items()},
             reasoning=f"KRX VWAP #{slice_num}차 ({slice_time_str}) 스마트 분할 체결"
@@ -197,7 +224,7 @@ def market_close_settlement():
         account = PaperTradingAccount(db=db)
         state = account.get_status()
         print(f"📊 [오늘의 마감 최종 자산]: {state.get('total_nav_krw', 1_000_000_000):,.0f} 원 (누적 수익률: {state.get('cumulative_return_pct', 0.0):+.2f}%)")
-        print(f"💤 내일 아침 08:30까지 시스템 저전력 절전(Sleep) 대기 모드 진입.\n")
+        print(f"💤 내일 아침 08:00까지 시스템 저전력 절전(Sleep) 대기 모드 진입.\n")
     except Exception as e:
         print(f"❌ [장 마감 정산 예외 발생]: {e}")
 
@@ -205,11 +232,15 @@ def start_daemon_loop():
     """스케줄러 데몬 무한 루프"""
     print("=" * 75)
     print("🤖 [Smart Lifecycle Daemon] 한국거래소(KRX) 장 시간 자동화 스케줄러 상주 시작")
-    print("⏰ [기상 & 모닝 전략] 평일 08:30 KST (DART 공시 + 10억 리밸런싱 + 슬랙 발송)")
+    print("📡 [08:00] 증권사 퀀트 리서치 & 스마트 수급 크롤러 RAG 인덱싱")
+    print("⏰ [08:30] DART 공시 + 거시 매크로 + 10억 리밸런싱 + 슬랙 발송")
     print("⚡ [VWAP 6구간 분할] 09:10, 09:40, 10:30, 13:00, 14:00, 15:00 KST 분할 매입")
     print("⏰ [장중 리스크 감시] 평일 09:05 ~ 15:30 KST (10분 주기 비상 서킷브레이커 감시)")
     print("⏰ [마감 & 절전 대기] 평일 15:40 KST (공식 종가 정산 + 야간 절전 대기)")
     print("=" * 75)
+
+    # 0. 08:00 증권사 리포트 & 스마트 수급 크롤링
+    schedule.every().day.at("08:00").do(early_morning_intelligence_harvest)
 
     # 1. 08:30 모닝 전략 수립
     schedule.every().day.at("08:30").do(morning_briefing_and_rebalance)

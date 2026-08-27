@@ -14,10 +14,16 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="실행할 명령어")
 
     # setup
-    subparsers.add_parser("setup", help="893개 ETF 마스터 DB 및 RAG 인덱스 초기화")
+    subparsers.add_parser("setup", help="896개 ETF 마스터 DB 및 RAG 인덱스 초기화")
     
     # harvest
     subparsers.add_parser("harvest", help="대표 ETF 시세 및 매크로 지표 데이터 수집")
+
+    # harvest-research
+    subparsers.add_parser("harvest-research", help="증권사 최신 ETF 퀀트 리서치 리포트 크롤링 및 RAG 색인")
+
+    # harvest-flows
+    subparsers.add_parser("harvest-flows", help="KRX 외국인/기관 스마트 수급 데이터 수집 및 RAG 색인")
 
     # harvest-history
     hist_parser = subparsers.add_parser("harvest-history", help="과거 1~3년 치 대규모 시계열 데이터 수집 및 공분산 분석")
@@ -112,6 +118,16 @@ def main():
         collector = FinancialDataCollector()
         collector.collect_multi_year_history(years=1)
         collector.collect_macro_rates()
+    elif args.command == "harvest-research":
+        from src.database.research_report_collector import InstitutionalResearchCollector
+        col = InstitutionalResearchCollector()
+        reports = col.fetch_daily_etf_strategy_reports()
+        col.save_reports_to_rag(reports)
+    elif args.command == "harvest-flows":
+        from src.database.institutional_flow_collector import InstitutionalFlowCollector
+        col = InstitutionalFlowCollector()
+        flows = col.fetch_smart_money_flows()
+        col.save_flows_to_rag(flows)
     elif args.command == "harvest-history":
         from src.database.data_collector import FinancialDataCollector
         collector = FinancialDataCollector()
