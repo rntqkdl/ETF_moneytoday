@@ -463,9 +463,26 @@
                     }
                 };
 
+                let pollingTimer = null;
+
+                const startPolling = (intervalMs = 10000) => {
+                    if (pollingTimer) clearInterval(pollingTimer);
+                    pollingTimer = setInterval(fetchData, intervalMs);
+                };
+
                 onMounted(() => {
                     fetchData();
-                    setInterval(fetchData, 5000); // 5초 주기 실시간 동기화
+                    startPolling(10000); // 평상시 10초 주기
+
+                    // 🌿 스마트 저전력 모드: 백그라운드 탭일 때 폴링 주기를 60초로 늦추어 배터리 & 발열 절감
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.hidden) {
+                            startPolling(60000); // 탭 숨김 시 60초
+                        } else {
+                            fetchData();
+                            startPolling(10000); // 탭 복귀 시 10초
+                        }
+                    });
                 });
 
                 return {

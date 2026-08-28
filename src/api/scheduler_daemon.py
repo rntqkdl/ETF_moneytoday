@@ -265,7 +265,11 @@ def start_daemon_loop():
             schedule.run_pending()
         except Exception as e:
             print(f"⚠️ [Scheduler 루프 경고]: {e}")
-        time.sleep(5)
+        
+        # 🌿 스마트 저전력: 장 운영 시간(08:00~16:00) 외에는 30초 슬립으로 CPU/발열 0% 유지
+        now = datetime.datetime.now(KST)
+        is_trading_hour = (now.weekday() < 5) and (datetime.time(8, 0) <= now.time() <= datetime.time(16, 0))
+        time.sleep(5 if is_trading_hour else 30)
 
 if __name__ == "__main__":
     start_daemon_loop()
